@@ -337,20 +337,17 @@ def EffNet(x0):
 
 
 
+  
+
+def get_model():
+
+  img_shape = (12, 128, 256)     
+  desire_shape = (8,)
+  traffic_convection_shape = (2,)
+  rnn_state_shape = (512,)
+  
  
-
-
-
-def get_model(img_shape, desire_shape, traffic_convection_shape, rnn_state_shape, num_classes):
-
-  img_shape = (256, 256, 3)
-
-  in0 = keras.Input(shape=img_shape, name="imgs")
-    #--- imgs.shape = (None, 12, 128, 256)
-
-  # in0 = layers.Permute((2, 3, 1))(imgs)
-    #--- in0.shape = (None, 128, 256, 12)
-
+  in0 = keras.Input(shape=img_shape, name="imgs") #--- in0.shape = (None, 12, 128, 256)        
   in1 = keras.Input(shape=desire_shape, name="desire")
   in2 = keras.Input(shape=traffic_convection_shape, name="traffic_convection")
   in3 = keras.Input(shape=rnn_state_shape, name="rnn_state")
@@ -370,12 +367,14 @@ def get_model(img_shape, desire_shape, traffic_convection_shape, rnn_state_shape
         })
       )
 
-  fastvit(tf.random.uniform([1, 256, 256, 3]))
+  
   fastvit.load_ckpt('ckpt', 'acc0p96.pkl')
 
 
   # x_to_RNNfk2fk3 = EffNet(in0)
-  x_to_RNNfk2fk3= fastvit(in0)
+
+  img = layers.Permute((2, 3, 1))(in0) #--- in0.shape = (None, 128, 256, 12)
+  x_to_RNNfk2fk3= fastvit(img)
 
 
   out11 = RNN(x_to_RNNfk2fk3, in1, in2, in3)
@@ -398,17 +397,10 @@ def get_model(img_shape, desire_shape, traffic_convection_shape, rnn_state_shape
 
 
 if __name__=="__main__":
-    # Build model
-  
-  # img_shape = (12, 128, 256)
-  img_shape = (256, 256, 3)
+ 
 
-  desire_shape = (8,)
-  traffic_convection_shape = (2,)
-  rnn_state_shape = (512,)
-  num_classes = 6
 
-  model = get_model(img_shape, desire_shape, traffic_convection_shape, rnn_state_shape, num_classes)
+  model = get_model()
 
   model.summary()
   #model.save('./saved_model/modelB6.h5')

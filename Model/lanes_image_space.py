@@ -37,27 +37,33 @@ view_from_road = view_from_device.dot(device_from_road)
 extrinsic_matrix = np.hstack((view_from_road, [[0], [height], [0]])).flatten()
 
 extrinsic_matrix_eigen = np.zeros((3, 4))
-i = 0
-while i < 4*3:
+# i = 0
+# while i < 4*3:
+for i in range(4*3):
   extrinsic_matrix_eigen[int(i / 4), int(i % 4)] = extrinsic_matrix[i]
-  i += 1
+  # i += 1
 
 StartPt, PATH_DISTANCE = 4, 192
 
 def transform_points(x, y):
   new_x = []
   new_y = []
-  i = 0
-  while i < PATH_DISTANCE:
+  # i = 0
+  # while i < PATH_DISTANCE:
+  for i in range(PATH_DISTANCE)
     xi = x[i]
     yi = y[i]
     p_car_space = np.array([xi, yi, 0., 1.])
+    
     Ep4 = np.matmul(extrinsic_matrix_eigen, p_car_space)
+
     Ep = np.array([Ep4[0], Ep4[1], Ep4[2]])
+    
     KEp = np.dot(intrinsic_matrix, Ep)
+
     p_full_frame = np.array([KEp[0] / KEp[2], KEp[1] / KEp[2], 1.])
       #print('#---  p_full_frame =', p_full_frame)
     new_x.append(p_full_frame[0])
     new_y.append(p_full_frame[1])
-    i += 1
+    # i += 1
   return new_x[StartPt:], new_y[StartPt:]

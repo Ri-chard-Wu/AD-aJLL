@@ -82,7 +82,7 @@ def datagen(batch_size, camera_files):
   # 2 yub imgs.
   Ximgs  = np.zeros((batch_size, 12, 128, 256), dtype='float32')   # Is YUV input img uint8? No. See float8 ysf = convert_float8(ys) in loadyuv.cl
 
-  Ximgs_rgb  = np.zeros((batch_size, 256, 256, 3), dtype='float32') 
+  # Ximgs_rgb  = np.zeros((batch_size, 256, 256, 3), dtype='float32') 
 
 
   Xin1   = np.zeros((batch_size, 8), dtype='float32')     # DESIRE_LEN = 8
@@ -148,37 +148,30 @@ def datagen(batch_size, camera_files):
 
               yuvX = yuv['X'] #--- yuvX.shape = (1200, 6, 128, 256) or (1199, 6, 128, 256)        
        
+ 
+              # frames_rgb = []
 
+              # cap = cv2.VideoCapture(hevc_file)
 
+              # ret, frame = cap.read()  # bgr img.
+              # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) # rgb img.
 
-              frames_rgb = []
+              # count = 0
+              # while ret: 
+              #     count += 1   
 
-              cap = cv2.VideoCapture(hevc_file)
+              #     frame = Image.fromarray(frame)
+              #     frame = frame.resize((256, 256), Image.BILINEAR) 
+              #     frame = np.array(frame) # (84, 84, 3)
 
-              ret, frame = cap.read()  # bgr img.
-              frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) # rgb img.
+              #     frame = (frame - 127.5) / 127.5
 
-              count = 0
-              while ret: 
-                  count += 1   
+              #     frames_rgb.append(frame)
 
-                  frame = Image.fromarray(frame)
-                  frame = frame.resize((256, 256), Image.BILINEAR) 
-                  frame = np.array(frame) # (84, 84, 3)
+              #     ret, frame = cap.read() 
+              #     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) # rgb img.
 
-                  frame = (frame - 127.5) / 127.5
-
-                  frames_rgb.append(frame)
-
-                  ret, frame = cap.read() 
-                  frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) # rgb img.
-
-        
-
-
-
-
-                  
+         
 
               yuvX_len = len(yuvX)  # = 1200 or 1199
               lastIdx = yuvX_len - 2 - batch_size   # cannot be the last frame yuvX_len-1
@@ -197,10 +190,10 @@ def datagen(batch_size, camera_files):
                       # rgb = frames_rgb[bcount+i]
 
                         #--- vsX2.shape = (6, 128, 256)
-                      Ximgs[bcount] = np.vstack((vsX1, vsX2))   # stack two yuv images i and i+1
+                      Ximgs[bcount] = np.vstack((vsX1, vsX2))  
                         #--- Ximgs[bcount].shape = (12, 128, 256)
                       
-                      Ximgs_rgb[bcount] = frames_rgb[bcount+i]
+                      # Ximgs_rgb[bcount] = frames_rgb[bcount+i]
 
                       Xin3[bcount] = Xin3_temp
 
@@ -223,7 +216,7 @@ def datagen(batch_size, camera_files):
                       Ytrue11[bcount] = outs[11]
                       bcount += 1
 
-                  yield Ximgs_rgb, Xin1, Xin2, Xin3, Ytrue0, Ytrue1, Ytrue2, \
+                  yield Ximgs, Xin1, Xin2, Xin3, Ytrue0, Ytrue1, Ytrue2, \
                             Ytrue3, Ytrue4, Ytrue5, Ytrue6, Ytrue7, Ytrue8, Ytrue9, Ytrue10, Ytrue11
                   
                   Step += 1

@@ -1040,6 +1040,40 @@ class FastViT(tf.keras.Model):
 
         # def build(self, input_shape):
         # cfg = self.cfg
+        
+
+
+        def yuv2rgb_seq():
+
+            seq = []            
+            seq.append(tf.keras.layers.ZeroPadding2D(padding=(64, 0)))
+            seq.append(
+                    tf.keras.layers.Conv2D(
+                                    filters=3,
+                                    kernel_size=3,
+                                    strides=1,
+                                    padding='same',
+                                    use_bias=True,
+                                    name='conv'
+                                )
+                )    
+            return seq
+
+        # (b, 128, 256, 12) -> (b, 256, 256, 3)
+        self.yuv2rgb = ModuleList('yuv2rgb', yuv2rgb_seq)
+
+
+
+
+        
+        # self.yuv2rgb_pad = tf.keras.layers.ZeroPadding2D(padding=(64, 0))
+        # self.yuv2rgb = tf.keras.layers.Conv2D(
+        #                             filters=3,
+        #                             kernel_size=3,
+        #                             strides=1,
+        #                             padding='same',
+        #                             use_bias=True
+        #                         )
 
         self.patch_embed = convolutional_stem(3, cfg.embed_dims[0], cfg.inference_mode)
 
@@ -1141,18 +1175,24 @@ class FastViT(tf.keras.Model):
 
     def load_ckpt(self, dir_name, name):
         
+
+        self(tf.random.uniform([1, 128, 256, 12]))
+
         path = os.path.join(dir_name, name)
         with open(path, 'rb') as f:            
             weights = pickle.load(f)
         
         assert len(weights) > 0
-        
-        # print(f'#############333self.weights: {self.weights}')
+         
 
         total_count = len(weights)
         count = 0
         for i, w in enumerate(self.weights):
             
+            if('yuv2rgb' in w.name): 
+                # print(f'w.name: {w.name}')
+                continue
+
             # weights[w.name] = w
             # print(f'w.name: {w.name}')
             # exit()
@@ -1172,6 +1212,10 @@ class FastViT(tf.keras.Model):
 
     @tf.function
     def call(self, x, training=True):
+
+        
+        x = self.yuv2rgb(x)
+
 
         # print(f'[fastvitpy] x.shape: {x.shape}')
         x = self.patch_embed(x, training=training)

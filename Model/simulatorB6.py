@@ -39,9 +39,16 @@ camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--32/video.hevc'
 # camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--37/video.hevc'
 # camerafile = '/home/richard/openpilot/tools/replay/dataC/8bfda98c9c9e4291|2020-05-11--03-00-57/61/fcamera.hevc'
 
-supercombo = load_model('saved_model/B6.keras', compile = False)   # 1 out = (1, 2383)
+# supercombo = load_model('saved_model/B6.keras', compile = False)   # 1 out = (1, 2383)
 #supercombo = load_model('models/supercombo079.keras', compile = False)   # 12 outs
 #print(supercombo.summary())
+
+supercombo = get_model()
+supercombo.load_weights(f'ckpt/modelB6-{1050}.h5')  # for retraining
+
+
+
+
 '''
 supercombo = load_model('saved_model/B6.keras', compile = False)   # 1 out = (1, 2383)
   99 :  new_x_path = [567.7336717867292, 625.5671301933083, 552.933855447142] parsed["path"][0] = [ 0.23713899  0.16713709 -0.5016851 ]
