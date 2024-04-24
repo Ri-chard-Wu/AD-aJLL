@@ -1,0 +1,11 @@
+*.keras
+*.h5
+*.pkl
+tinygrad/
+Model-v1/
+Control/
+cerealJLL/
+Coding/
+UI/
+
+
