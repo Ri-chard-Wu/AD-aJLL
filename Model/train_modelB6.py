@@ -39,12 +39,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import tensorflow.keras.backend as KB
-from tensorflow.keras.callbacks import Callback, ModelCheckpoint, EarlyStopping
-
+ 
 from modelB6 import get_model
 from serverB6 import client_generator, BATCH_SIZE, STEPS, EPOCHS
-from datagenB6 import datagen_test
 
+from tqdm import tqdm
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 
@@ -119,17 +118,8 @@ if __name__=="__main__":
     rnn_state_shape = (512,)
     num_classes = 6
     model = get_model(img_shape, desire_shape, traffic_convection_shape, rnn_state_shape, num_classes)
-    #model.summary()
-
-    # Compile model
-    filepath = "./saved_model/B6BW.hdf5"  # BW: Best Weights
-    checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
-
-    total_epoches, warmup_epoches, hold = EPOCHS, 6, 4  # must: total_epoches > warmup_epoches + hold
  
-
-
-
+ 
     # model.load_weights(f'ckpt/modelB6-{90}.h5')  # for retraining
 
  
@@ -137,7 +127,7 @@ if __name__=="__main__":
     val_dataset = get_data(20, args.host, port=args.port_val, model=model)
 
 
-    def validate(n=25):
+    def validate(n=5):
         
         print(f'## validating...')
 
@@ -155,7 +145,7 @@ if __name__=="__main__":
             X, Y = batch
             count += len(Y)
 
-            Y_pred = model(X, training=True) # (128, 10)
+            Y_pred = model(X, training=False) # (128, 10)
             loss, metric = train_loss_fn(Y, Y_pred)
 
             losses += loss.numpy().sum()
@@ -166,7 +156,7 @@ if __name__=="__main__":
         losses = losses / count
         metrics = metrics / count
 
-        print(f'validation - loss: {losses}, metric: {metrics}')
+        print(f'validation - loss: {losses}, metric: {metrics}, count: {count}')
 
         return losses, metrics
 
