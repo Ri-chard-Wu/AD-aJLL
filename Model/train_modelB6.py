@@ -98,9 +98,21 @@ def custom_loss(y_true, y_pred):
     #--- min of y_true, min index = -139.88947 (array([0]), array([1168]))  # MDN_GROUP_SIZE*LEAD_MDN_N+SELECTION=11*5+3=58
     # 1168-385-386-386=1168-1157=11=outs[3][11] (1st of 11, 2nd of 5); -139.889=data[1*11] in driving079.cc; why -???
   loss_CS = tf.keras.losses.cosine_similarity(y_true, y_pred, axis=-1)  # MC4 (Md Case 4)
+
+  # print(f'loss_CS.shape: {loss_CS.shape}')
+
   loss_MSE = tf.keras.losses.mse(y_true, y_pred)  # MC5
+
+  # print(f'loss_MSE.shape: {loss_MSE.shape}')
+
   loss = 0.5 * loss_CS + 0.5 * loss_MSE  # MC5
-  return loss, maxae(y_true, y_pred)
+
+  metric = maxae(y_true, y_pred)
+
+  # print(f'metric.shape: {metric.shape}')
+
+  # exit()
+  return loss, metric
 
 
 
@@ -203,27 +215,54 @@ if __name__=="__main__":
     # model.compile(optimizer=optimizer, loss=custom_loss, metrics=[maxae])
 
 
-
-
-    # a = get_data(20, args.host, port=args.port_val, model=model)
-
-    # for i, data in enumerate(a):
-    #     print(f'[{i}] len(data): {len(data)}')
-    #     x, y = data
-    #     model(x)
-    #     if(i > 10): break       
-  
-    # exit()
-
-
-
  
 
-    model.load_weights(f'ckpt/modelB6-{60}.h5')  # for retraining
+
+
+
+
+
+    model.load_weights(f'ckpt/modelB6-{90}.h5')  # for retraining
 
  
     train_dataset = get_data(20, args.host, port=args.port, model=model)
     val_dataset = get_data(20, args.host, port=args.port_val, model=model)
+
+
+    def validate(n=25):
+        
+        print(f'## validating...')
+
+        good = total = 0
+        # steps = input_pipeline.get_dataset_info(dataset, 'test')['num_examples'] // batch_size
+
+        # for _, batch in zip(tqdm.trange(steps), ds_test.as_numpy_iterator()):
+
+        losses = 0
+        metrics = 0
+        count = 0
+        for i, batch in tqdm(enumerate(val_dataset)):
+            if i >= n: break
+
+            X, Y = batch
+            count += len(Y)
+
+            Y_pred = model(X, training=True) # (128, 10)
+            loss, metric = train_loss_fn(Y, Y_pred)
+
+            losses += loss.numpy().sum()
+            metrics += metric.numpy().sum()
+
+        assert count == n * BATCH_SIZE, f'{count} != {n * BATCH_SIZE}'
+
+        losses = losses / count
+        metrics = metrics / count
+
+        print(f'validation - loss: {losses}, metric: {metrics}')
+
+        return losses, metrics
+
+ 
 
 
     total_steps = 1000
@@ -290,13 +329,13 @@ if __name__=="__main__":
 
     log_interval = 5
     save_interval = 30
-    validate_interval = 15
+    validate_interval = 20
 
     update_counts = 0
     for epoch in range(100):
 
         # losses = []
-        for i, batch in enumerate(train_dataset):
+        for i, batch in enumerate(train_dataset): # have ~600 training batches.
 
             X, Y = batch
                         
@@ -308,18 +347,11 @@ if __name__=="__main__":
             total_metric = 0.0
             accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
             step_size = batch_size // accum_steps
-            for step in range(accum_steps):
-                # with tf.GradientTape() as tape:
-                #     Y_pred = model(X, training=True)
-                #     loss = train_loss_fn(Y_pred, Y)
-                # grad = tape.gradient(loss, model.trainable_variables)
+            for step in range(accum_steps): 
 
-                # X_step = X[step*step_size:(step+1)*step_size]
                 X_step = [a[step*step_size:(step+1)*step_size] for a in X]
                 Y_step = Y[step*step_size:(step+1)*step_size]
-
-                # print(f'len(X_step): {len(X_step)}, X_step[0].shape: {X_step[0].shape}, Y_step.shape: {Y_step.shape}')
-
+ 
                 loss, metric, grad = _train_step(X_step, Y_step)
 
                 for i in range(len(accum_gradients)):
@@ -343,9 +375,8 @@ if __name__=="__main__":
                 f', total_metric: {total_metric / accum_steps}' + f', lr: {lr_next}')
 
 
-            # if update_counts % validate_interval == 0:
-            #     good, total = validate()
-            #     print(f'acc: {good / total}, good: {good}, total: {total}')
+            if update_counts % validate_interval == 0:
+                loss, metric = validate()                
             
 
             if update_counts % save_interval == 0:
