@@ -1,0 +1,579 @@
+Model: "modelB6"
+__________________________________________________________________________________________________
+ Layer (type)                Output Shape                 Param #   Connected to                  
+==================================================================================================
+ pic (InputLayer)            [(None, 12, 128, 256)]       0         []                            
+                                                                                                  
+ permute (Permute)           (None, 128, 256, 12)         0         ['pic[0][0]']                 
+                                                                                                  
+ stem_conv (Conv2D)          (None, 64, 128, 32)          3488      ['permute[0][0]']             
+                                                                                                  
+ stem_activation (Activatio  (None, 64, 128, 32)          0         ['stem_conv[0][0]']           
+ n)                                                                                               
+                                                                                                  
+ block1a_dwconv (DepthwiseC  (None, 64, 128, 32)          320       ['stem_activation[0][0]']     
+ onv2D)                                                                                           
+                                                                                                  
+ block1a_activation (Activa  (None, 64, 128, 32)          0         ['block1a_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block1a_project_conv (Conv  (None, 64, 128, 16)          528       ['block1a_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block1b_dwconv (DepthwiseC  (None, 64, 128, 16)          160       ['block1a_project_conv[0][0]']
+ onv2D)                                                                                           
+                                                                                                  
+ block1b_activation (Activa  (None, 64, 128, 16)          0         ['block1b_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block1b_project_conv (Conv  (None, 64, 128, 16)          272       ['block1b_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block1b_add (Add)           (None, 64, 128, 16)          0         ['block1b_project_conv[0][0]',
+                                                                     'block1a_project_conv[0][0]']
+                                                                                                  
+ block2a_expand_conv (Conv2  (None, 64, 128, 96)          1632      ['block1b_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block2a_expand_activation   (None, 64, 128, 96)          0         ['block2a_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block2a_dwconv (DepthwiseC  (None, 32, 64, 96)           960       ['block2a_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block2a_activation (Activa  (None, 32, 64, 96)           0         ['block2a_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block2a_project_conv (Conv  (None, 32, 64, 24)           2328      ['block2a_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block2b_expand_conv (Conv2  (None, 32, 64, 144)          3600      ['block2a_project_conv[0][0]']
+ D)                                                                                               
+                                                                                                  
+ block2b_expand_activation   (None, 32, 64, 144)          0         ['block2b_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block2b_dwconv (DepthwiseC  (None, 32, 64, 144)          1440      ['block2b_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block2b_activation (Activa  (None, 32, 64, 144)          0         ['block2b_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block2b_project_conv (Conv  (None, 32, 64, 24)           3480      ['block2b_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block2b_add (Add)           (None, 32, 64, 24)           0         ['block2b_project_conv[0][0]',
+                                                                     'block2a_project_conv[0][0]']
+                                                                                                  
+ block2c_expand_conv (Conv2  (None, 32, 64, 144)          3600      ['block2b_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block2c_expand_activation   (None, 32, 64, 144)          0         ['block2c_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block2c_dwconv (DepthwiseC  (None, 32, 64, 144)          1440      ['block2c_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block2c_activation (Activa  (None, 32, 64, 144)          0         ['block2c_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block2c_project_conv (Conv  (None, 32, 64, 24)           3480      ['block2c_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block2c_add (Add)           (None, 32, 64, 24)           0         ['block2c_project_conv[0][0]',
+                                                                     'block2b_add[0][0]']         
+                                                                                                  
+ block3a_expand_conv (Conv2  (None, 32, 64, 144)          3600      ['block2c_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block3a_expand_activation   (None, 32, 64, 144)          0         ['block3a_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block3a_dwconv (DepthwiseC  (None, 16, 32, 144)          3744      ['block3a_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block3a_activation (Activa  (None, 16, 32, 144)          0         ['block3a_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block3a_project_conv (Conv  (None, 16, 32, 48)           6960      ['block3a_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block3b_expand_conv (Conv2  (None, 16, 32, 288)          14112     ['block3a_project_conv[0][0]']
+ D)                                                                                               
+                                                                                                  
+ block3b_expand_activation   (None, 16, 32, 288)          0         ['block3b_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block3b_dwconv (DepthwiseC  (None, 16, 32, 288)          7488      ['block3b_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block3b_activation (Activa  (None, 16, 32, 288)          0         ['block3b_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block3b_project_conv (Conv  (None, 16, 32, 48)           13872     ['block3b_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block3b_add (Add)           (None, 16, 32, 48)           0         ['block3b_project_conv[0][0]',
+                                                                     'block3a_project_conv[0][0]']
+                                                                                                  
+ block3c_expand_conv (Conv2  (None, 16, 32, 288)          14112     ['block3b_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block3c_expand_activation   (None, 16, 32, 288)          0         ['block3c_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block3c_dwconv (DepthwiseC  (None, 16, 32, 288)          7488      ['block3c_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block3c_activation (Activa  (None, 16, 32, 288)          0         ['block3c_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block3c_project_conv (Conv  (None, 16, 32, 48)           13872     ['block3c_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block3c_add (Add)           (None, 16, 32, 48)           0         ['block3c_project_conv[0][0]',
+                                                                     'block3b_add[0][0]']         
+                                                                                                  
+ block4a_expand_conv (Conv2  (None, 16, 32, 288)          14112     ['block3c_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block4a_expand_activation   (None, 16, 32, 288)          0         ['block4a_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block4a_dwconv (DepthwiseC  (None, 8, 16, 288)           2880      ['block4a_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block4a_activation (Activa  (None, 8, 16, 288)           0         ['block4a_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block4a_project_conv (Conv  (None, 8, 16, 88)            25432     ['block4a_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block4b_expand_conv (Conv2  (None, 8, 16, 528)           46992     ['block4a_project_conv[0][0]']
+ D)                                                                                               
+                                                                                                  
+ block4b_expand_activation   (None, 8, 16, 528)           0         ['block4b_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block4b_dwconv (DepthwiseC  (None, 8, 16, 528)           5280      ['block4b_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block4b_activation (Activa  (None, 8, 16, 528)           0         ['block4b_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block4b_project_conv (Conv  (None, 8, 16, 88)            46552     ['block4b_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block4b_add (Add)           (None, 8, 16, 88)            0         ['block4b_project_conv[0][0]',
+                                                                     'block4a_project_conv[0][0]']
+                                                                                                  
+ block4c_expand_conv (Conv2  (None, 8, 16, 528)           46992     ['block4b_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block4c_expand_activation   (None, 8, 16, 528)           0         ['block4c_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block4c_dwconv (DepthwiseC  (None, 8, 16, 528)           5280      ['block4c_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block4c_activation (Activa  (None, 8, 16, 528)           0         ['block4c_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block4c_project_conv (Conv  (None, 8, 16, 88)            46552     ['block4c_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block4c_add (Add)           (None, 8, 16, 88)            0         ['block4c_project_conv[0][0]',
+                                                                     'block4b_add[0][0]']         
+                                                                                                  
+ block4d_expand_conv (Conv2  (None, 8, 16, 528)           46992     ['block4c_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block4d_expand_activation   (None, 8, 16, 528)           0         ['block4d_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block4d_dwconv (DepthwiseC  (None, 8, 16, 528)           5280      ['block4d_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block4d_activation (Activa  (None, 8, 16, 528)           0         ['block4d_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block4d_project_conv (Conv  (None, 8, 16, 88)            46552     ['block4d_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block4d_add (Add)           (None, 8, 16, 88)            0         ['block4d_project_conv[0][0]',
+                                                                     'block4c_add[0][0]']         
+                                                                                                  
+ block5a_expand_conv (Conv2  (None, 8, 16, 528)           46992     ['block4d_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block5a_expand_activation   (None, 8, 16, 528)           0         ['block5a_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block5a_dwconv (DepthwiseC  (None, 8, 16, 528)           13728     ['block5a_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block5a_activation (Activa  (None, 8, 16, 528)           0         ['block5a_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block5a_project_conv (Conv  (None, 8, 16, 120)           63480     ['block5a_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block5b_expand_conv (Conv2  (None, 8, 16, 720)           87120     ['block5a_project_conv[0][0]']
+ D)                                                                                               
+                                                                                                  
+ block5b_expand_activation   (None, 8, 16, 720)           0         ['block5b_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block5b_dwconv (DepthwiseC  (None, 8, 16, 720)           18720     ['block5b_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block5b_activation (Activa  (None, 8, 16, 720)           0         ['block5b_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block5b_project_conv (Conv  (None, 8, 16, 120)           86520     ['block5b_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block5b_add (Add)           (None, 8, 16, 120)           0         ['block5b_project_conv[0][0]',
+                                                                     'block5a_project_conv[0][0]']
+                                                                                                  
+ block5c_expand_conv (Conv2  (None, 8, 16, 720)           87120     ['block5b_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block5c_expand_activation   (None, 8, 16, 720)           0         ['block5c_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block5c_dwconv (DepthwiseC  (None, 8, 16, 720)           18720     ['block5c_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block5c_activation (Activa  (None, 8, 16, 720)           0         ['block5c_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block5c_project_conv (Conv  (None, 8, 16, 120)           86520     ['block5c_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block5c_add (Add)           (None, 8, 16, 120)           0         ['block5c_project_conv[0][0]',
+                                                                     'block5b_add[0][0]']         
+                                                                                                  
+ block5d_expand_conv (Conv2  (None, 8, 16, 720)           87120     ['block5c_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block5d_expand_activation   (None, 8, 16, 720)           0         ['block5d_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block5d_dwconv (DepthwiseC  (None, 8, 16, 720)           18720     ['block5d_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block5d_activation (Activa  (None, 8, 16, 720)           0         ['block5d_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block5d_project_conv (Conv  (None, 8, 16, 120)           86520     ['block5d_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block5d_add (Add)           (None, 8, 16, 120)           0         ['block5d_project_conv[0][0]',
+                                                                     'block5c_add[0][0]']         
+                                                                                                  
+ block6a_expand_conv (Conv2  (None, 8, 16, 720)           87120     ['block5d_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block6a_expand_activation   (None, 8, 16, 720)           0         ['block6a_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block6a_dwconv (DepthwiseC  (None, 4, 8, 720)            18720     ['block6a_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block6a_activation (Activa  (None, 4, 8, 720)            0         ['block6a_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block6a_project_conv (Conv  (None, 4, 8, 208)            149968    ['block6a_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block6b_expand_conv (Conv2  (None, 4, 8, 1248)           260832    ['block6a_project_conv[0][0]']
+ D)                                                                                               
+                                                                                                  
+ block6b_expand_activation   (None, 4, 8, 1248)           0         ['block6b_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block6b_dwconv (DepthwiseC  (None, 4, 8, 1248)           32448     ['block6b_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block6b_activation (Activa  (None, 4, 8, 1248)           0         ['block6b_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block6b_project_conv (Conv  (None, 4, 8, 208)            259792    ['block6b_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block6b_add (Add)           (None, 4, 8, 208)            0         ['block6b_project_conv[0][0]',
+                                                                     'block6a_project_conv[0][0]']
+                                                                                                  
+ block6c_expand_conv (Conv2  (None, 4, 8, 1248)           260832    ['block6b_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block6c_expand_activation   (None, 4, 8, 1248)           0         ['block6c_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block6c_dwconv (DepthwiseC  (None, 4, 8, 1248)           32448     ['block6c_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block6c_activation (Activa  (None, 4, 8, 1248)           0         ['block6c_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block6c_project_conv (Conv  (None, 4, 8, 208)            259792    ['block6c_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block6c_add (Add)           (None, 4, 8, 208)            0         ['block6c_project_conv[0][0]',
+                                                                     'block6b_add[0][0]']         
+                                                                                                  
+ block6d_expand_conv (Conv2  (None, 4, 8, 1248)           260832    ['block6c_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block6d_expand_activation   (None, 4, 8, 1248)           0         ['block6d_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block6d_dwconv (DepthwiseC  (None, 4, 8, 1248)           32448     ['block6d_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block6d_activation (Activa  (None, 4, 8, 1248)           0         ['block6d_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block6d_project_conv (Conv  (None, 4, 8, 208)            259792    ['block6d_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block6d_add (Add)           (None, 4, 8, 208)            0         ['block6d_project_conv[0][0]',
+                                                                     'block6c_add[0][0]']         
+                                                                                                  
+ block6e_expand_conv (Conv2  (None, 4, 8, 1248)           260832    ['block6d_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block6e_expand_activation   (None, 4, 8, 1248)           0         ['block6e_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block6e_dwconv (DepthwiseC  (None, 4, 8, 1248)           32448     ['block6e_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block6e_activation (Activa  (None, 4, 8, 1248)           0         ['block6e_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block6e_project_conv (Conv  (None, 4, 8, 208)            259792    ['block6e_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block6e_add (Add)           (None, 4, 8, 208)            0         ['block6e_project_conv[0][0]',
+                                                                     'block6d_add[0][0]']         
+                                                                                                  
+ block7a_expand_conv (Conv2  (None, 4, 8, 1248)           260832    ['block6e_add[0][0]']         
+ D)                                                                                               
+                                                                                                  
+ block7a_expand_activation   (None, 4, 8, 1248)           0         ['block7a_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block7a_dwconv (DepthwiseC  (None, 4, 8, 1248)           12480     ['block7a_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block7a_activation (Activa  (None, 4, 8, 1248)           0         ['block7a_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block7a_project_conv (Conv  (None, 4, 8, 352)            439648    ['block7a_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block7b_expand_conv (Conv2  (None, 4, 8, 2112)           745536    ['block7a_project_conv[0][0]']
+ D)                                                                                               
+                                                                                                  
+ block7b_expand_activation   (None, 4, 8, 2112)           0         ['block7b_expand_conv[0][0]'] 
+ (Activation)                                                                                     
+                                                                                                  
+ block7b_dwconv (DepthwiseC  (None, 4, 8, 2112)           21120     ['block7b_expand_activation[0]
+ onv2D)                                                             [0]']                         
+                                                                                                  
+ block7b_activation (Activa  (None, 4, 8, 2112)           0         ['block7b_dwconv[0][0]']      
+ tion)                                                                                            
+                                                                                                  
+ block7b_project_conv (Conv  (None, 4, 8, 352)            743776    ['block7b_activation[0][0]']  
+ 2D)                                                                                              
+                                                                                                  
+ block7b_add (Add)           (None, 4, 8, 352)            0         ['block7b_project_conv[0][0]',
+                                                                     'block7a_project_conv[0][0]']
+                                                                                                  
+ top_conv (Conv2D)           (None, 4, 8, 1408)           497024    ['block7b_add[0][0]']         
+                                                                                                  
+ top_activation (Activation  (None, 4, 8, 1408)           0         ['top_conv[0][0]']            
+ )                                                                                                
+                                                                                                  
+ conv2d (Conv2D)             (None, 4, 8, 32)             45088     ['top_activation[0][0]']      
+                                                                                                  
+ desire (InputLayer)         [(None, 8)]                  0         []                            
+                                                                                                  
+ traffic_convection (InputL  [(None, 2)]                  0         []                            
+ ayer)                                                                                            
+                                                                                                  
+ activation (Activation)     (None, 4, 8, 32)             0         ['conv2d[0][0]']              
+                                                                                                  
+ dense (Dense)               (None, 8)                    64        ['desire[0][0]']              
+                                                                                                  
+ dense_1 (Dense)             (None, 2)                    4         ['traffic_convection[0][0]']  
+                                                                                                  
+ flatten (Flatten)           (None, 1024)                 0         ['activation[0][0]']          
+                                                                                                  
+ concatenate (Concatenate)   (None, 1034)                 0         ['dense[0][0]',               
+                                                                     'dense_1[0][0]',             
+                                                                     'flatten[0][0]']             
+                                                                                                  
+ dense_2 (Dense)             (None, 1024)                 1058816   ['concatenate[0][0]']         
+                                                                                                  
+ rnn_state (InputLayer)      [(None, 512)]                0         []                            
+                                                                                                  
+ activation_1 (Activation)   (None, 1024)                 0         ['dense_2[0][0]']             
+                                                                                                  
+ dense_4 (Dense)             (None, 512)                  262144    ['rnn_state[0][0]']           
+                                                                                                  
+ dense_9 (Dense)             (None, 512)                  524288    ['activation_1[0][0]']        
+                                                                                                  
+ dense_5 (Dense)             (None, 512)                  262144    ['rnn_state[0][0]']           
+                                                                                                  
+ add_1 (Add)                 (None, 512)                  0         ['dense_4[0][0]',             
+                                                                     'dense_9[0][0]']             
+                                                                                                  
+ dense_3 (Dense)             (None, 512)                  262144    ['rnn_state[0][0]']           
+                                                                                                  
+ dense_7 (Dense)             (None, 512)                  524288    ['activation_1[0][0]']        
+                                                                                                  
+ dense_6 (Dense)             (None, 512)                  262144    ['dense_5[0][0]']             
+                                                                                                  
+ activation_3 (Activation)   (None, 512)                  0         ['add_1[0][0]']               
+                                                                                                  
+ add (Add)                   (None, 512)                  0         ['dense_3[0][0]',             
+                                                                     'dense_7[0][0]']             
+                                                                                                  
+ dense_8 (Dense)             (None, 512)                  524288    ['activation_1[0][0]']        
+                                                                                                  
+ tf.math.multiply (TFOpLamb  (None, 512)                  0         ['dense_6[0][0]',             
+ da)                                                                 'activation_3[0][0]']        
+                                                                                                  
+ activation_2 (Activation)   (None, 512)                  0         ['add[0][0]']                 
+                                                                                                  
+ add_2 (Add)                 (None, 512)                  0         ['dense_8[0][0]',             
+                                                                     'tf.math.multiply[0][0]']    
+                                                                                                  
+ dense_10 (Dense)            (None, 512)                  262144    ['activation_2[0][0]']        
+                                                                                                  
+ activation_4 (Activation)   (None, 512)                  0         ['add_2[0][0]']               
+                                                                                                  
+ tf.math.multiply_2 (TFOpLa  (None, 512)                  0         ['dense_5[0][0]',             
+ mbda)                                                               'activation_2[0][0]']        
+                                                                                                  
+ tf.math.multiply_1 (TFOpLa  (None, 512)                  0         ['dense_10[0][0]',            
+ mbda)                                                               'activation_4[0][0]']        
+                                                                                                  
+ add_3 (Add)                 (None, 512)                  0         ['tf.math.multiply_2[0][0]',  
+                                                                     'tf.math.multiply_1[0][0]']  
+                                                                                                  
+ 1_path (Dense)              (None, 256)                  131328    ['add_3[0][0]']               
+                                                                                                  
+ 1_left_lane (Dense)         (None, 256)                  131328    ['add_3[0][0]']               
+                                                                                                  
+ 1_right_lane (Dense)        (None, 256)                  131328    ['add_3[0][0]']               
+                                                                                                  
+ 1_lead (Dense)              (None, 256)                  131328    ['add_3[0][0]']               
+                                                                                                  
+ 1_long_x (Dense)            (None, 256)                  131328    ['add_3[0][0]']               
+                                                                                                  
+ 1_long_a (Dense)            (None, 256)                  131328    ['add_3[0][0]']               
+                                                                                                  
+ 1_long_v (Dense)            (None, 256)                  131328    ['add_3[0][0]']               
+                                                                                                  
+ meta0 (Dense)               (None, 256)                  262400    ['flatten[0][0]']             
+                                                                                                  
+ 2_path (Dense)              (None, 256)                  65792     ['1_path[0][0]']              
+                                                                                                  
+ 2_left_lane (Dense)         (None, 256)                  65792     ['1_left_lane[0][0]']         
+                                                                                                  
+ 2_right_lane (Dense)        (None, 256)                  65792     ['1_right_lane[0][0]']        
+                                                                                                  
+ 2_lead (Dense)              (None, 256)                  65792     ['1_lead[0][0]']              
+                                                                                                  
+ 2_long_x (Dense)            (None, 256)                  65792     ['1_long_x[0][0]']            
+                                                                                                  
+ 2_long_a (Dense)            (None, 256)                  65792     ['1_long_a[0][0]']            
+                                                                                                  
+ 2_long_v (Dense)            (None, 256)                  65792     ['1_long_v[0][0]']            
+                                                                                                  
+ desire_final_dense (Dense)  (None, 32)                   8224      ['meta0[0][0]']               
+                                                                                                  
+ 3_path (Dense)              (None, 256)                  65792     ['2_path[0][0]']              
+                                                                                                  
+ 3_left_lane (Dense)         (None, 256)                  65792     ['2_left_lane[0][0]']         
+                                                                                                  
+ 3_right_lane (Dense)        (None, 256)                  65792     ['2_right_lane[0][0]']        
+                                                                                                  
+ 3_lead (Dense)              (None, 256)                  65792     ['2_lead[0][0]']              
+                                                                                                  
+ 3_long_x (Dense)            (None, 256)                  65792     ['2_long_x[0][0]']            
+                                                                                                  
+ 3_long_a (Dense)            (None, 256)                  65792     ['2_long_a[0][0]']            
+                                                                                                  
+ 3_long_v (Dense)            (None, 256)                  65792     ['2_long_v[0][0]']            
+                                                                                                  
+ 1_desire_state (Dense)      (None, 128)                  65664     ['add_3[0][0]']               
+                                                                                                  
+ desire_reshape (Reshape)    (None, 4, 8)                 0         ['desire_final_dense[0][0]']  
+                                                                                                  
+ dense_11 (Dense)            (None, 64)                   65600     ['flatten[0][0]']             
+                                                                                                  
+ final_path (Dense)          (None, 128)                  32896     ['3_path[0][0]']              
+                                                                                                  
+ final_left_lane (Dense)     (None, 128)                  32896     ['3_left_lane[0][0]']         
+                                                                                                  
+ final_right_lane (Dense)    (None, 128)                  32896     ['3_right_lane[0][0]']        
+                                                                                                  
+ final_lead (Dense)          (None, 128)                  32896     ['3_lead[0][0]']              
+                                                                                                  
+ final_long_x (Dense)        (None, 128)                  32896     ['3_long_x[0][0]']            
+                                                                                                  
+ final_long_a (Dense)        (None, 128)                  32896     ['3_long_a[0][0]']            
+                                                                                                  
+ final_long_v (Dense)        (None, 128)                  32896     ['3_long_v[0][0]']            
+                                                                                                  
+ final_desire_state (Dense)  (None, 8)                    1032      ['1_desire_state[0][0]']      
+                                                                                                  
+ desire_pred0 (Softmax)      (None, 4, 8)                 0         ['desire_reshape[0][0]']      
+                                                                                                  
+ dense_12 (Dense)            (None, 32)                   2080      ['dense_11[0][0]']            
+                                                                                                  
+ path (Dense)                (None, 385)                  49665     ['final_path[0][0]']          
+                                                                                                  
+ left_lane (Dense)           (None, 386)                  49794     ['final_left_lane[0][0]']     
+                                                                                                  
+ right_lane (Dense)          (None, 386)                  49794     ['final_right_lane[0][0]']    
+                                                                                                  
+ lead (Dense)                (None, 58)                   7482      ['final_lead[0][0]']          
+                                                                                                  
+ long_x (Dense)              (None, 200)                  25800     ['final_long_x[0][0]']        
+                                                                                                  
+ long_a (Dense)              (None, 200)                  25800     ['final_long_a[0][0]']        
+                                                                                                  
+ long_v (Dense)              (None, 200)                  25800     ['final_long_v[0][0]']        
+                                                                                                  
+ desire_state (Softmax)      (None, 8)                    0         ['final_desire_state[0][0]']  
+                                                                                                  
+ meta (Dense)                (None, 4)                    1028      ['meta0[0][0]']               
+                                                                                                  
+ desire_pred (Flatten)       (None, 32)                   0         ['desire_pred0[0][0]']        
+                                                                                                  
+ pose (Dense)                (None, 12)                   396       ['dense_12[0][0]']            
+                                                                                                  
+ concatenate_1 (Concatenate  (None, 2383)                 0         ['path[0][0]',                
+ )                                                                   'left_lane[0][0]',           
+                                                                     'right_lane[0][0]',          
+                                                                     'lead[0][0]',                
+                                                                     'long_x[0][0]',              
+                                                                     'long_a[0][0]',              
+                                                                     'long_v[0][0]',              
+                                                                     'desire_state[0][0]',        
+                                                                     'meta[0][0]',                
+                                                                     'desire_pred[0][0]',         
+                                                                     'pose[0][0]',                
+                                                                     'add_3[0][0]']               
+                                                                                                  
+==================================================================================================
+Total params: 13039435 (49.74 MB)
+Trainable params: 13039435 (49.74 MB)
+Non-trainable params: 0 (0.00 Byte)
+__________________________________________________________________________________________________

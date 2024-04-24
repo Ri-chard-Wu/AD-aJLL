@@ -1,0 +1,80 @@
+JLL, 2021.8.18 - 2022.4.19
+
+output of
+(YPN) jinn@Liu:~/YPN/Leon$ python simulatorB5.py
+
+FULL_FRAME_SIZE = (1164, 874); W, H = FULL_FRAME_SIZE[0], FULL_FRAME_SIZE[1]
+eon_focal_length = FOCAL = 910.0
+cv2.COLOR_BGR2YUV_I420
+
+---JLL   frame.shape          =  (874, 1164, 3)   # big RGB (see main.py)
+---JLL   img_yuv.shape        =  (1311, 1164)     # big YUV, 874*3//2 = 1311
+---JLL   imgs.shape           =  (20, 1311, 1164)
+---JLL   imgs_med_model.shape =  (20, 384, 512)   # small YUV
+---JLL   frame_tensors.shape                         =  (20, 6, 128, 256)  # small YUV w/ 6 channels
+---JLL   frame_tensors[i:i+2].shape                  =  (2, 6, 128, 256)   # 2 sYUVs
+---JLL   np.vstack(frame_tensors[i:i+2])[None].shape =  (1, 12, 128, 256)  # stack 2 sYUVs
+---JLL   inputs[ 0 ].shape =  (1, 12, 128, 256)   # 12 = 2 frames x 6 channels (YUV_I420: Y=4, U=1, V=1)
+---JLL   inputs[ 1 ].shape =  (1, 8)              # 8 = DESIRE_STATE_IDX in driving079.cc
+---JLL   inputs[ 2 ].shape =  (1, 512)            # rnn state = TEMPORAL_SIZE in driving079.cc
+
+path, ll, rl, lead, long_x, long_v, long_a, desire_state, meta, desire_pred, pose, state = outs
+
+#---  outs[ 0 ].shape = (1, 385)   # path
+#---  outs[ 1 ].shape = (1, 386)   # ll
+#---  outs[ 2 ].shape = (1, 386)   # rl
+#---  outs[ 3 ].shape = (1, 58)    # lead
+#---  outs[ 4 ].shape = (1, 200)   # long_x
+#---  outs[ 5 ].shape = (1, 200)   # long_v
+#---  outs[ 6 ].shape = (1, 200)   # long_a
+#---  outs[ 7 ].shape = (1, 8)     # desire_state
+#---  outs[ 8 ].shape = (1, 4)     # meta
+#---  outs[ 9 ].shape = (1, 32)    # desire_pred
+#---  outs[ 10 ].shape = (1, 12)   # pose
+#---  outs[ 11 ].shape = (1, 512)  # state
+---JLL 1  parsed[ path             ].shape =  (1, 192)
+---JLL 2  parsed[ path_stds        ].shape =  (1, 192)
+---JLL 3  parsed[ lll              ].shape =  (1, 192)
+---JLL 4  parsed[ lll_prob         ].shape =  (1,)
+---JLL 5  parsed[ lll_stds         ].shape =  (1, 192)
+---JLL 6  parsed[ rll              ].shape =  (1, 192)
+---JLL 7  parsed[ rll_prob         ].shape =  (1,)
+---JLL 8  parsed[ rll_stds         ].shape =  (1, 192)
+---JLL 9  parsed[ lead_xyva        ].shape =  (1, 4)
+---JLL 10  parsed[ lead_xyva_std    ].shape =  (1, 4)
+---JLL 11  parsed[ lead_prob        ].shape =  (1,)
+---JLL 12  parsed[ lead_xyva_2s     ].shape =  (1, 4)
+---JLL 13  parsed[ lead_xyva_std_2s ].shape =  (1, 4)
+---JLL 14  parsed[ lead_prob_2s     ].shape =  (1,)
+---JLL 15  parsed[ lead_all         ].shape =  (1, 58)
+---JLL 16  parsed[ meta             ].shape =  (1, 32)
+---JLL 17  parsed[ desire           ].shape =  (1, 12)
+---JLL 18  parsed[ desire_state     ].shape =  (1, 4)
+---JLL 19  parsed[ long_x           ].shape =  (1, 200)
+---JLL 20  parsed[ long_v           ].shape =  (1, 200)
+---JLL 21  parsed[ long_a           ].shape =  (1, 200)
+---JLL 22  parsed[ trans            ].shape =  (1, 3)
+---JLL 23  parsed[ trans_std        ].shape =  (1, 3)
+---JLL 24  parsed[ rot              ].shape =  (1, 3)
+---JLL 25  parsed[ rot_std          ].shape =  (1, 3)
+---JLL   state.shape            =  (1, 512)
+---JLL   pose.shape             =  (1, 12)
+---JLL   frame.cv2.resize.shape =  (420, 640, 3)
+Press ENTER to exit ...
+
+#---  outs[ 0 ].shape = (1, 385)   # path
+--- see poly_fit() in driving079.cc and vander.cc
+outs[0][384] = valid_len in driving079.cc = MODEL_PATH_DISTANCE in vander.cc
+
+#---  outs[ 3 ].shape = (1, 58)    # lead
+--- see fill_lead() in driving079.cc
+LEAD_MDN_N = 5 probs (weights) for 5 groups (MDN = Mixture Density Networks https://www.katnoria.com/mdn/)
+Networks?? Yes in training? SELECTION 3 = output 3 groups (lead now, in 2s and 6s),
+MDN_GROUP_SIZE = 11 = 4 lead_xyva + 4 lead_xyva_std + 3 lead_weights (0, 2, 6s),
+58 = LEAD_MDN_N * MDN_GROUP_SIZE + SELECTION
+
+--- old error
+  /home/jinn/YPN/Leon/common/lanes_image_space.py:90: RuntimeWarning: divide by zero encountered in double_scalars
+    p_image = p_full_frame = np.array([KEp[0] / KEp[2], KEp[1] / KEp[2], 1.])
+  #--- i        = 0
+  #--- frame_no = 2 :  new_x_path =  [564.5524355752472, 570.3962832018733, 572.4756284654528] parsed["path"][0] =  [0.05420419 0.05350511 0.05132698]
