@@ -18,7 +18,7 @@ from datagenB6 import datagen
 #BATCH_SIZE, STEPS, EPOCHS = 2, 10, 60  # Run Time: 01:06:08
 
 
-BATCH_SIZE, STEPS, EPOCHS = 64, 20, 60  # Run Time: 04:02:18
+BATCH_SIZE, STEPS, EPOCHS = 4, 20, 60  # Run Time: 04:02:18
 
 if six.PY3:
   buffer_ = memoryview

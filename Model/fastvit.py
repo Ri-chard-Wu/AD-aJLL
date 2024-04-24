@@ -1034,7 +1034,7 @@ class FastViT(tf.keras.Model):
         for key, val in self.DEFAULT_CFG.items():
             if key in self.cfg: continue
             self.cfg[key] = val
-        super(FastViT, self).__init__(name='')
+        super(FastViT, self).__init__(name='fastvit')
 
 
 
@@ -1145,15 +1145,29 @@ class FastViT(tf.keras.Model):
         with open(path, 'rb') as f:            
             weights = pickle.load(f)
         
+        assert len(weights) > 0
         
+        # print(f'#############333self.weights: {self.weights}')
 
+        total_count = len(weights)
+        count = 0
         for i, w in enumerate(self.weights):
+            
             # weights[w.name] = w
-            assert w.name in weights
+            # print(f'w.name: {w.name}')
+            # exit()
+            assert w.name in weights, w.name
+
             w.assign(weights[w.name])
+            del weights[w.name]
+            count += 1
             # print(f'[{i}] type(weights[w.name]): {type(weights[w.name])}, w.name: {w.name}, weights[w.name].shape: {weights[w.name].shape}')
 
-        print(f'loaded ckpt: {path}')
+        print(f'## copied {count} / {total_count} layers.')
+        print(f'## uncopied layers: {list(weights.keys())}')
+        print(f'## loaded ckpt: {path}')
+
+        # exit()
 
 
     @tf.function

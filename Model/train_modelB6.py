@@ -88,6 +88,7 @@ def get_data(hwm, host, port, model):
 def maxae(y_true, y_pred):
   return KB.max(KB.abs(y_pred - y_true), axis=-1)
 
+
 def custom_loss(y_true, y_pred):
     #--- y_true.shape = (None, None)
     #--- y_pred.shape = (None, 2383)
@@ -135,6 +136,7 @@ def lr_CosineDecayWarmup(global_epoch, total_epoches, warmup_epoches, hold, targ
   return learning_rate
 
 
+
 class CosineDecayWarmup(Callback):
 
   def __init__(self, target_lr=1e-3, total_epoches=0, warmup_epoches=0, hold=0):
@@ -163,6 +165,7 @@ class CosineDecayWarmup(Callback):
 
 
 
+
 if __name__=="__main__":
     start = time.time()
     AP = argparse.ArgumentParser(description='Training modelB6')
@@ -177,9 +180,9 @@ if __name__=="__main__":
     # img_shape = (12, 128, 256) # 2 yub img.
     img_shape = (256, 256, 3) # 2 yub img.
 
-    desire_shape = (8)
-    traffic_convection_shape = (2)
-    rnn_state_shape = (512)
+    desire_shape = (8,)
+    traffic_convection_shape = (2,)
+    rnn_state_shape = (512,)
     num_classes = 6
     model = get_model(img_shape, desire_shape, traffic_convection_shape, rnn_state_shape, num_classes)
     #model.summary()
@@ -214,20 +217,11 @@ if __name__=="__main__":
 
 
 
+ 
 
+    model.load_weights(f'ckpt/modelB6-{60}.h5')  # for retraining
 
-
-
-    ''' 1. Train and validate model '''
-
-    #model.load_weights('./saved_model/B6BW.hdf5')  # for retraining
-
-    # history = model.fit(
-    #           get_data(20, args.host, port=args.port, model=model),
-    #           steps_per_epoch=STEPS, epochs=EPOCHS,
-    #           validation_data=get_data(20, args.host, port=args.port_val, model=model),
-    #           validation_steps=STEPS, verbose=1, callbacks=callbacks_list)
-
+ 
     train_dataset = get_data(20, args.host, port=args.port, model=model)
     val_dataset = get_data(20, args.host, port=args.port_val, model=model)
 
@@ -239,8 +233,9 @@ if __name__=="__main__":
     grad_norm_clip = 1
     linear_end=1e-5
 
-    accum_steps = 32
+    accum_steps = 1
     batch_size = BATCH_SIZE
+
 
 
     optimizer = tf.keras.optimizers.AdamW(learning_rate=base_lr, weight_decay=0.05, ema_momentum=0.9)        
@@ -294,7 +289,7 @@ if __name__=="__main__":
 
 
     log_interval = 5
-    save_interval = 5
+    save_interval = 30
     validate_interval = 15
 
     update_counts = 0
@@ -304,9 +299,7 @@ if __name__=="__main__":
         for i, batch in enumerate(train_dataset):
 
             X, Y = batch
-            
-            
-
+                        
             if(len(X[0]) < batch_size):
                 print(f'len(X) < batch_size: {len(X[0])}')
                 break
@@ -325,7 +318,7 @@ if __name__=="__main__":
                 X_step = [a[step*step_size:(step+1)*step_size] for a in X]
                 Y_step = Y[step*step_size:(step+1)*step_size]
 
-                print(f'len(X_step): {len(X_step)}, X_step[0].shape: {X_step[0].shape}, Y_step.shape: {Y_step.shape}')
+                # print(f'len(X_step): {len(X_step)}, X_step[0].shape: {X_step[0].shape}, Y_step.shape: {Y_step.shape}')
 
                 loss, metric, grad = _train_step(X_step, Y_step)
 

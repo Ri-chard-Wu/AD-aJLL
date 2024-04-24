@@ -338,18 +338,6 @@ def EffNet(x0):
 
 
  
-fastvit = FastViT(
-      AttrDict({
-          'layers': [2, 2, 6, 2],
-          'embed_dims': [64, 128, 256, 512],
-          'token_mixers': ("repmixer", "repmixer", "repmixer", "repmixer"),
-          'pos_embs': [None, None, None, None],
-          'mlp_ratios': [3, 3, 3, 3],
-          'downsamples': [True, True, True, True]
-      })
-    )
-
-fastvit.load_ckpt('ckpt', 'acc0p96.pkl')
 
 
 
@@ -369,6 +357,23 @@ def get_model(img_shape, desire_shape, traffic_convection_shape, rnn_state_shape
   inputs = [in0, in1, in2, in3]
 
 
+  input_shapes = [img_shape, desire_shape, traffic_convection_shape, rnn_state_shape]
+
+  fastvit = FastViT(
+        AttrDict({
+            'layers': [2, 2, 6, 2],
+            'embed_dims': [64, 128, 256, 512],
+            'token_mixers': ("repmixer", "repmixer", "repmixer", "repmixer"),
+            'pos_embs': [None, None, None, None],
+            'mlp_ratios': [3, 3, 3, 3],
+            'downsamples': [True, True, True, True]
+        })
+      )
+
+  fastvit(tf.random.uniform([1, 256, 256, 3]))
+  fastvit.load_ckpt('ckpt', 'acc0p96.pkl')
+
+
   # x_to_RNNfk2fk3 = EffNet(in0)
   x_to_RNNfk2fk3= fastvit(in0)
 
@@ -382,6 +387,12 @@ def get_model(img_shape, desire_shape, traffic_convection_shape, rnn_state_shape
 
     # Define the model
   model = keras.Model(inputs=inputs, outputs=outs, name='modelB6')
+   
+
+  Y = model([tf.random.uniform([3, *shape]) for shape in input_shapes])
+  
+  print(f'## Init pass. Y.shape: {Y.shape}')
+  # exit()
   return model
 
 
@@ -392,9 +403,9 @@ if __name__=="__main__":
   # img_shape = (12, 128, 256)
   img_shape = (256, 256, 3)
 
-  desire_shape = (8)
-  traffic_convection_shape = (2)
-  rnn_state_shape = (512)
+  desire_shape = (8,)
+  traffic_convection_shape = (2,)
+  rnn_state_shape = (512,)
   num_classes = 6
 
   model = get_model(img_shape, desire_shape, traffic_convection_shape, rnn_state_shape, num_classes)
