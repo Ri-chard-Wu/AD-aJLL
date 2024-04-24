@@ -155,7 +155,9 @@ def datagen(batch_size, camera_files):
 
               cap = cv2.VideoCapture(hevc_file)
 
-              ret, frame = cap.read()  # frame; rgb img.
+              ret, frame = cap.read()  # bgr img.
+              frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) # rgb img.
+
               count = 0
               while ret: 
                   count += 1   
@@ -164,9 +166,12 @@ def datagen(batch_size, camera_files):
                   frame = frame.resize((256, 256), Image.BILINEAR) 
                   frame = np.array(frame) # (84, 84, 3)
 
+                  frame = (frame - 127.5) / 127.5
+
                   frames_rgb.append(frame)
 
                   ret, frame = cap.read() 
+                  frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB) # rgb img.
 
         
 

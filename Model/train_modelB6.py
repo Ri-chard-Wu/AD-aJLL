@@ -47,40 +47,20 @@ from datagenB6 import datagen_test
 
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
-# a batch of data. e.g. Ximgs.shape[0] == batch size.
+
+
+
 def get_data(hwm, host, port, model):
   for tup in client_generator(hwm=hwm, host=host, port=port):
     Ximgs_rgb, Xin1, Xin2, Xin3, Ytrue0, Ytrue1, Ytrue2, Ytrue3, Ytrue4,\
                            Ytrue5, Ytrue6, Ytrue7, Ytrue8, Ytrue9, Ytrue10, Ytrue11 = tup
-
-    # print(f'Ximgs_rgb: {Ximgs_rgb.shape}')
-
-    
-
-    # Xins  = [Ximgs_rgb, Xin1, Xin2, Xin3]  #  (imgs, traffic_convection, desire, rnn_state)
-    # Ytrue = np.hstack((Ytrue0, Ytrue1, Ytrue2, Ytrue3, Ytrue4, Ytrue5,
-    #                          Ytrue6, Ytrue7, Ytrue8, Ytrue9, Ytrue10, Ytrue11))
-
+ 
     Xins  = [*tup[:4]]
     Xins = [tf.convert_to_tensor(x, dtype=tf.float32) for x in Xins]
 
     Ytrue = np.hstack(tup[4:])
     Ytrue = tf.convert_to_tensor(Ytrue, dtype=tf.float32)
-
-
-    # print(f'Ytrue: {Ytrue}')
-
-    # exit()
-    
  
-
-
-    #   #--- Xins[0].shape = (16, 12, 128, 256)
-    #   #--- Ytrue.shape = (16, 2383)
-    #   # we need the following two lines, otherwise we always get #--- y_true.shape[0] = None
-    # p = model.predict(x=Xins)
-    # loss1 = custom_loss(Ytrue, p)
-    
     yield Xins, Ytrue
 
 
@@ -115,71 +95,13 @@ def custom_loss(y_true, y_pred):
   return loss, metric
 
 
-
-
-
-
-# def maxae(y_true, y_pred):
-#   return tf.math.maximum(tf.math.abs(y_pred - y_true), axis=-1)
-
-
-
-
-
-
-class PrintLearningRate(Callback):
-  def on_epoch_begin(self, epoch, logs={}):
-    lr = KB.eval(self.model.optimizer.lr)
-    print('\n', "epoch:", epoch, ', LR: {:.3g}'.format(lr))
-
-
-def scheduler(epoch):
-  return KB.get_value(model.optimizer.lr)
-
-# global_epoch increment by 1 every STEPS number of data.
-def lr_CosineDecayWarmup(global_epoch, total_epoches, warmup_epoches, hold, target_lr=1e-3):
-  if global_epoch < warmup_epoches:
-    learning_rate = target_lr * (global_epoch / warmup_epoches)  # linear warmup from 0 to target_lr
-  elif global_epoch < warmup_epoches + hold:
-    learning_rate = target_lr
-  else:
-
-    learning_rate = 0.5 * target_lr * ( 1 + np.cos( np.pi * float(global_epoch / total_epoches) ) )
-  return learning_rate
-
-
-
-class CosineDecayWarmup(Callback):
-
-  def __init__(self, target_lr=1e-3, total_epoches=0, warmup_epoches=0, hold=0):
-    super(CosineDecayWarmup, self).__init__()
-    self.target_lr = target_lr
-    self.total_epoches = total_epoches
-    self.warmup_epoches = warmup_epoches
-    self.hold = hold
-    self.global_epoch = 0 # global_epoch increment by 1 every STEPS number of data.
-    self.lrs = []
-
-  def on_epoch_begin(self, epoch, logs=None):
-    self.global_epoch = KB.get_value(epoch)
-
-  def on_batch_begin(self, batch, logs=None):
-
-    # global_epoch increment by 1 every STEPS number of data.
-    lr = lr_CosineDecayWarmup(global_epoch=self.global_epoch, total_epoches=self.total_epoches,
-                      warmup_epoches=self.warmup_epoches, hold=self.hold, target_lr=self.target_lr)
-    #print("#--- self.global_epoch =", self.global_epoch)
-    KB.set_value(self.model.optimizer.lr, lr)
-
-  def on_batch_end(self, batch, logs=None):
-    lr = model.optimizer.lr.numpy()
-    self.lrs.append(lr)
-
-
+  
 
 
 if __name__=="__main__":
+
     start = time.time()
+
     AP = argparse.ArgumentParser(description='Training modelB6')
     AP.add_argument('--host', type=str, default="localhost", help='Data server ip address.')
     AP.add_argument('--port', type=int, default=5557, help='Port of server.')
@@ -204,25 +126,11 @@ if __name__=="__main__":
     checkpoint = ModelCheckpoint(filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
     total_epoches, warmup_epoches, hold = EPOCHS, 6, 4  # must: total_epoches > warmup_epoches + hold
-    lr_schedule = CosineDecayWarmup(target_lr=1e-3, total_epoches=total_epoches, warmup_epoches=warmup_epoches, hold=hold)
-    # optimizer = tf.keras.optimizers.AdamW(learning_rate=0.0, weight_decay=0.004, clipvalue=1.0)
-
-    printlr = PrintLearningRate()
-    updatelr = tf.keras.callbacks.LearningRateScheduler(scheduler)
-
-    callbacks_list = [checkpoint, printlr, updatelr, lr_schedule]
-
-    # model.compile(optimizer=optimizer, loss=custom_loss, metrics=[maxae])
-
-
  
 
 
 
-
-
-
-    model.load_weights(f'ckpt/modelB6-{90}.h5')  # for retraining
+    # model.load_weights(f'ckpt/modelB6-{90}.h5')  # for retraining
 
  
     train_dataset = get_data(20, args.host, port=args.port, model=model)
@@ -300,8 +208,6 @@ if __name__=="__main__":
 
         return np.asarray(lr, dtype=np.float32) 
 
-    # train_loss_fn = tf.keras.losses.CategoricalCrossentropy(from_logits=False,
-    #                                     reduction=tf.keras.losses.Reduction.NONE)
 
     train_loss_fn = custom_loss
 
@@ -329,7 +235,7 @@ if __name__=="__main__":
 
     log_interval = 5
     save_interval = 30
-    validate_interval = 20
+    validate_interval = 30
 
     update_counts = 0
     for epoch in range(100):
@@ -427,7 +333,7 @@ if __name__=="__main__":
     plt.legend(['train', 'validate'], loc='upper right')
 
     plt.subplot(313)
-    plt.plot(history.history["lr"])  # = lr (from Terminal) = lr_schedule (decayed)
+    plt.plot(history.history["lr"])  
     plt.ylabel("learning rate")
 
     plt.draw()
@@ -436,54 +342,3 @@ if __name__=="__main__":
     input("Press ENTER to close ...")
     plt.close()
 
-    ''' 2. Test model
-
-    # Test model by only 2 images
-    # Run: (sconsvenv) jinn@Liu:~/openpilot/aJLL/Model$ python train_modelB6.py
-    print("#--- Testing ...")
-
-    # Load pre-trained model for predicting
-    #model.load_weights('./saved_model/B6.keras')
-    model.load_weights('./saved_model/B6BW.hdf5')
-
-    camera_file = '/home/jinn/dataB6/UHD--2018-08-02--08-34-47--33/video.hevc'
-    Xins, Ytrue = datagen_test(1, camera_file)
-    Ypred = model.predict(x=Xins)
-      #--- Testing Time: 00:00:04.57
-
-    plt.subplot(211)
-    Ytrue_1 = Ytrue[0]
-    Ypred_1 = Ypred[0]
-    plt.plot(Ytrue_1)
-    plt.plot(Ypred_1)
-    plt.legend(['Ytrue', 'Ypred'], loc='upper left')
-    #plt.title('Y-2383 by Huber Loss', fontweight='bold')
-    plt.title('MC5 Y-2383', fontweight='bold')
-
-    plt.subplot(212)
-    Ytrue_2 = Ytrue[0][0:385]
-    Ypred_2 = Ypred[0][0:385]
-    plt.plot(Ytrue_2)
-    plt.plot(Ypred_2)
-    plt.legend(['Ytrue', 'Ypred'], loc='upper left')
-    plt.title('Y-385', fontweight='bold')
-
-    plt.draw()
-    plt.savefig('./output/B6YCM.png')
-    plt.pause(0.5)
-    input("Press ENTER to close ...")
-    plt.close() '''
-
-    ''' 3. Test CosineDecayWarmup
-
-    epoches = np.arange(0, 1000, 1)
-    lrs = []
-    total_epoches, warmup_epoches, hold = len(epoches), 100, 200
-    for epoch in epoches:
-      lrs.append(lr_CosineDecayWarmup(epoch, total_epoches=total_epoches, warmup_epoches=warmup_epoches, hold=hold))
-    schedule = CosineDecayWarmup(target_lr=1e-3, total_epoches=total_epoches, warmup_epoches=warmup_epoches, hold=hold)
-    plt.plot(lrs)
-    plt.draw()
-    plt.pause(0.5)
-    input("Press ENTER to close ...")
-    plt.close() '''
