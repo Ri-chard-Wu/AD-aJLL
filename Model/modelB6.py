@@ -356,6 +356,18 @@ def get_model():
 
   input_shapes = [img_shape, desire_shape, traffic_convection_shape, rnn_state_shape]
 
+
+
+  
+
+  img = layers.Permute((2, 3, 1))(in0) #--- in0.shape = (None, 128, 256, 12)
+
+
+
+  # x_to_RNNfk2fk3 = EffNet(in0)
+
+
+
   fastvit = FastViT(
         AttrDict({
             'layers': [2, 2, 6, 2],
@@ -366,15 +378,10 @@ def get_model():
             'downsamples': [True, True, True, True]
         })
       )
-
-  
-  fastvit.load_ckpt('ckpt', 'acc0p96.pkl')
-
-
-  # x_to_RNNfk2fk3 = EffNet(in0)
-
-  img = layers.Permute((2, 3, 1))(in0) #--- in0.shape = (None, 128, 256, 12)
+  # fastvit.load_ckpt('ckpt', 'acc0p96.pkl')  
   x_to_RNNfk2fk3= fastvit(img)
+
+
 
 
   out11 = RNN(x_to_RNNfk2fk3, in1, in2, in3)

@@ -43,10 +43,16 @@ camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--33/video.hevc'
 #supercombo = load_model('models/supercombo079.keras', compile = False)   # 12 outs
 #print(supercombo.summary())
 
-# supercombo = get_model()
-# supercombo.load_weights(f'ckpt/modelB6-{3300}.h5')  # for retraining
 
-supercombo = load_model('saved_model/supercombo079.keras', compile=False)
+
+
+
+supercombo = get_model()
+supercombo.load_weights(f'ckpt/modelB6-{700}.h5')  # for retraining
+
+# supercombo = load_model('saved_model/supercombo079.keras', compile=False)
+
+
 
 
 '''
@@ -170,9 +176,9 @@ for i in range(1200):
     
     inputs = [np.vstack(CsYUVs[0:2])[None], desire, traffic_convection, state]
 
-    outputs = supercombo(inputs)
-    outputs = [a.numpy() for a in outputs]
-    # outputs = supercombo.predict(inputs)
+    # outputs = supercombo(inputs)
+    # outputs = [a.numpy() for a in outputs]
+    outputs = supercombo.predict(inputs)
     # print(f'outputs.shape: {len(outputs)}')
   
     if len(outputs) == 1:   # for B6.keras

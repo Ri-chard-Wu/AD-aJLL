@@ -70,39 +70,43 @@ para = AttrDict(
     'decay_type': 'cosine',
     'warmup_steps': 5,
     'grad_norm_clip': 1,
-    'lr_min': 1e-5,
+    'lr_min': 1e-4,
 
     'accum_steps': 1,
-    'batch_size': 4,
+    'batch_size': 2,
 
     'weight_decay': 0.004,
-    'ema_momentum': 0.9, #0.99,
+    'ema_momentum': 0.99, #0.99,
 
     'host': "localhost",
     'port': 5557,
     'port_val': 5558,
 
-    'log_interval': 5,
-    'save_interval': 30,
-    'validate_interval': 60,
+    'log_interval': 20,
+    'save_interval': 100,
+    'validate_interval': 1000,
 
-    # 'ckpt_load_path': f'ckpt/modelB6-{90}.h5',
+    # 'ckpt_load_path': f'ckpt/modelB6-{700}.h5',
   }
 ) 
 
 
-# def get_data(hwm, host, port):
-#   for tup in client_generator(hwm=hwm, host=host, port=port):
-#     Ximgs_rgb, Xin1, Xin2, Xin3, Ytrue0, Ytrue1, Ytrue2, Ytrue3, Ytrue4,\
-#                            Ytrue5, Ytrue6, Ytrue7, Ytrue8, Ytrue9, Ytrue10, Ytrue11 = tup
- 
-#     Xins  = [*tup[:4]]
-#     Xins = [tf.convert_to_tensor(x, dtype=tf.float32) for x in Xins]
 
-#     Ytrue = np.hstack(tup[4:])
-#     Ytrue = tf.convert_to_tensor(Ytrue, dtype=tf.float32)
+def normalize_img(imgs):
+
  
-#     yield Xins, Ytrue
+    assert imgs.shape[1] == 12
+
+    c = 12
+
+    mean = [np.mean(imgs[:, i, ...]) for i in range(c)]
+    std = [np.std(imgs[:, i, ...]) for i in range(c)]
+  
+
+    for i in range(c):
+        imgs[:, i, ...] = (imgs[:, i, ...] - mean[i]) / std[i]
+
+    return imgs
 
 
 
@@ -112,7 +116,7 @@ def get_data(pkl_files):
     while(1):
 
         pkl_file = pkl_files[file_idx]
-        print(f'## get data: {pkl_file}')
+        # print(f'## get data: {pkl_file}')
         file_idx += 1
         if(file_idx >= len(pkl_files)): file_idx = 0
  
@@ -134,7 +138,16 @@ def get_data(pkl_files):
 
             for i in range(12):
                 assert data['Y'][i].shape == (n, Y_shapes[i])
+
+ 
             
+            # print(f"bn mean: {np.mean(data['Ximgs'], axis=(0,2,3))}, std: {np.std(data['Ximgs'], axis=(0,2,3))}")
+
+            data['Ximgs'] = normalize_img(data['Ximgs'])
+
+            # print(f"an mean: {np.mean(data['Ximgs'], axis=(0,2,3))}, std: {np.std(data['Ximgs'], axis=(0,2,3))}")
+            # exit()
+
         
         n_batches = n // para.batch_size
         for b in range(n_batches):
@@ -153,7 +166,7 @@ def get_data(pkl_files):
             assert Ytrue.shape == (para.batch_size, Y_dim)
             Ytrue = tf.convert_to_tensor(Ytrue, dtype=tf.float32)
         
-            print(f'## yield batch: {b} of file {file_idx}')
+            # print(f'## yield batch: {b} of file {file_idx}')
             yield Xins, Ytrue
 
 
@@ -166,16 +179,23 @@ def maxae(y_true, y_pred):
 
 
 
+PATH_IDX   = 0      
+LL_IDX     = 385    
+RL_IDX     = 771   
+LEAD_IDX   = 1157 
 
-def custom_loss(y_true, y_pred):
+def train_loss_fn(y_true, y_pred):
   
-  loss_CS = tf.keras.losses.cosine_similarity(y_true, y_pred, axis=-1)  # MC4 (Md Case 4)
+  # y_true = y_true[:, PATH_IDX:   LEAD_IDX]
+  # y_pred = y_pred[:, PATH_IDX:   LEAD_IDX]
+
+
+  # loss_CS = tf.keras.losses.cosine_similarity(y_true, y_pred, axis=-1)  # MC4 (Md Case 4)
   loss_MSE = tf.keras.losses.mse(y_true, y_pred)  # MC5
-  loss = 0.5 * loss_CS + 0.5 * loss_MSE  # MC5
-
-  metric = maxae(y_true, y_pred)
-
-  return loss, metric
+  
+  # loss = 0.5 * loss_CS + 0.5 * loss_MSE  # MC5
+ 
+  return loss_MSE
 
 
 
@@ -189,7 +209,7 @@ if 'ckpt_load_path' in para:
     model.load_weights(para.ckpt_load_path)  # for retraining
   
 optimizer = tf.keras.optimizers.AdamW(learning_rate=para.base_lr,
-                  weight_decay=para.weight_decay, ema_momentum=para.ema_momentum)        
+                  weight_decay=para.weight_decay, ema_momentum=para.ema_momentum, clipvalue=1.0)        
 
 # train_dataset = get_data(20, para.host, port=para.port)
 # val_dataset = get_data(20, para.host, port=para.port_val)
@@ -200,8 +220,8 @@ assert len(pkl_files) == 3
 print(f'pkl_files: {pkl_files}')
 
 
-train_dataset = get_data(pkl_files[0:2])
-val_dataset = get_data(pkl_files[2:3])
+train_dataset = get_data(pkl_files[0:3])
+# val_dataset = get_data(pkl_files[2:3])
 
 
 def validate(n=5):
@@ -258,19 +278,18 @@ def lr_scheduler(step):
     return np.asarray(lr, dtype=np.float32) 
 
 
-train_loss_fn = custom_loss
-
-
+ 
 @tf.function
 def _train_step(X_step, Y_step):
 
     with tf.GradientTape() as tape:
         Y_pred = model(X_step, training=True) # (128, 10)
-        loss, metric = train_loss_fn(Y_step, Y_pred)
+        loss = train_loss_fn(Y_step, Y_pred)
         loss = tf.reduce_mean(loss)
-        metric = tf.reduce_mean(metric)
-
+         
     grad = tape.gradient(loss, model.trainable_variables)
+
+    metric = tf.reduce_mean(maxae(Y_step, Y_pred))
 
     return loss, metric, grad
 
@@ -316,8 +335,8 @@ for epoch in range(10000):
 
        
         averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
-        clipped_grads, _ = tf.clip_by_global_norm(averaged_gradients, para.grad_norm_clip)
-        optimizer.apply_gradients(zip(clipped_grads, model.trainable_variables))
+        # clipped_grads, _ = tf.clip_by_global_norm(averaged_gradients, para.grad_norm_clip)
+        optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
 
      
         update_counts += 1
@@ -328,7 +347,7 @@ for epoch in range(10000):
         if update_counts % para.log_interval == 0:
             log = f'[{update_counts}] train loss: {total_loss / para.accum_steps}' + \
             f', train metric: {total_metric / para.accum_steps}' + f', lr: {lr_next}' 
-            # print(log)
+            print(log)
             with open("log.txt", "a") as f: f.write(log + '\n')
 
         

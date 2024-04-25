@@ -1,6 +1,8 @@
 *.keras
 *.h5
 *.pkl
+*.png
+*.jpeg
 tinygrad/
 Model-v1/
 Control/

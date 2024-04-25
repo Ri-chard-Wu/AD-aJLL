@@ -1042,31 +1042,104 @@ class FastViT(tf.keras.Model):
         # cfg = self.cfg
         
 
+        # def test_seq():
 
-        def yuv2rgb_seq():
+        #     seq = []            
+        #     seq.append(tf.keras.layers.ZeroPadding2D(padding=(64, 0)))
+        #     seq.append(
+        #             tf.keras.layers.Conv2D(
+        #                             filters=16,
+        #                             kernel_size=8,
+        #                             strides=4,
+        #                             # padding='same',
+        #                             use_bias=True
+        #                         )
+        #         )    
 
-            seq = []            
-            seq.append(tf.keras.layers.ZeroPadding2D(padding=(64, 0)))
-            seq.append(
-                    tf.keras.layers.Conv2D(
-                                    filters=3,
-                                    kernel_size=3,
-                                    strides=1,
-                                    padding='same',
-                                    use_bias=True,
-                                    name='conv'
-                                )
-                )    
-            return seq
+        #     seq.append(tf.keras.layers.LeakyReLU())
 
-        # (b, 128, 256, 12) -> (b, 256, 256, 3)
-        self.yuv2rgb = ModuleList('yuv2rgb', yuv2rgb_seq)
+        #     seq.append(
+        #             tf.keras.layers.Conv2D(
+        #                             filters=32,
+        #                             kernel_size=4,
+        #                             strides=2,
+        #                             # padding='same',
+        #                             use_bias=True
+        #                         )
+        #         )    
+
+        #     seq.append(tf.keras.layers.LeakyReLU())
+
+        #     seq.append(
+        #             tf.keras.layers.Conv2D(
+        #                             filters=64,
+        #                             kernel_size=4,
+        #                             strides=2,
+        #                             # padding='same',
+        #                             use_bias=True
+        #                         )
+        #         )    
+
+        #     seq.append(tf.keras.layers.LeakyReLU())
+
+        #     seq.append(
+        #             tf.keras.layers.Conv2D(
+        #                             filters=128,
+        #                             kernel_size=4,
+        #                             strides=2,
+        #                             # padding='same',
+        #                             use_bias=True
+        #                         )
+        #         )    
+
+        #     seq.append(tf.keras.layers.LeakyReLU())
+
+        #     seq.append(
+        #             tf.keras.layers.Conv2D(
+        #                             filters=256,
+        #                             kernel_size=4,
+        #                             strides=2,
+        #                             # padding='same',
+        #                             use_bias=True
+        #                         )
+        #         )    
+
+        #     seq.append(tf.keras.layers.LeakyReLU())
+
+        #     return seq
+        
+        # self.test = ModuleList('test', test_seq)
+
+
+
+
+
+
+
+        # def yuv2rgb_seq():
+
+        #     seq = []            
+        #     seq.append(tf.keras.layers.ZeroPadding2D(padding=(64, 0)))
+        #     # seq.append(
+        #     #         tf.keras.layers.Conv2D(
+        #     #                         filters=3,
+        #     #                         kernel_size=3,
+        #     #                         strides=1,
+        #     #                         padding='same',
+        #     #                         use_bias=True,
+        #     #                         name='conv'
+        #     #                     )
+        #     #     )    
+        #     return seq
+
+        # # (b, 128, 256, 12) -> (b, 256, 256, 3)
+        # self.yuv2rgb = ModuleList('yuv2rgb', yuv2rgb_seq)
 
 
 
 
         
-        # self.yuv2rgb_pad = tf.keras.layers.ZeroPadding2D(padding=(64, 0))
+        self.yuv_pad = tf.keras.layers.ZeroPadding2D(padding=(64, 0))
         # self.yuv2rgb = tf.keras.layers.Conv2D(
         #                             filters=3,
         #                             kernel_size=3,
@@ -1075,7 +1148,8 @@ class FastViT(tf.keras.Model):
         #                             use_bias=True
         #                         )
 
-        self.patch_embed = convolutional_stem(3, cfg.embed_dims[0], cfg.inference_mode)
+        # self.patch_embed = convolutional_stem(3, cfg.embed_dims[0], cfg.inference_mode)
+        self.patch_embed = convolutional_stem(6, cfg.embed_dims[0], cfg.inference_mode)
 
 
         # network[0]: basic_blocks
@@ -1172,7 +1246,7 @@ class FastViT(tf.keras.Model):
 
         print(f'saved ckpt: {path}')
         
-
+ 
     def load_ckpt(self, dir_name, name):
         
 
@@ -1206,29 +1280,31 @@ class FastViT(tf.keras.Model):
         print(f'## copied {count} / {total_count} layers.')
         print(f'## uncopied layers: {list(weights.keys())}')
         print(f'## loaded ckpt: {path}')
+ 
 
-        # exit()
-
-
-    @tf.function
+    # @tf.function
     def call(self, x, training=True):
 
         
-        x = self.yuv2rgb(x)
+        x = self.yuv_pad(x)
 
+
+        # print(f'x.shape: {x.shape}')
+        # exit()
 
         # print(f'[fastvitpy] x.shape: {x.shape}')
         x = self.patch_embed(x, training=training)
-
-        # for idx, block in enumerate(self.network):
-        #     x = block(x)
 
         x = self.network(x, training=training)
 
         x = self.conv_exp(x, training=training) # (1, 8, 8, 1216)
 
         x = self.gap(x, training=training) # (1, 1216)
- 
+
+
+        # x = self.test(x)
+        # x = tf.keras.layers.Flatten()(x)
+       
         return x
 
  
