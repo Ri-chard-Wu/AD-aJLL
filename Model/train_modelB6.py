@@ -41,10 +41,20 @@ import tensorflow as tf
 import tensorflow.keras.backend as KB
  
 from modelB6 import get_model
-from serverB6 import client_generator, BATCH_SIZE, STEPS, EPOCHS
+
 
 from tqdm import tqdm
+
+import glob
+import pickle
+
+# from serverB6 import client_generator, BATCH_SIZE, STEPS, EPOCHS
+
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+
+ 
+# print(f"## (len(tf.config.experimental.list_physical_devices('GPU'))): {(len(tf.config.experimental.list_physical_devices('GPU')))}")
+
 
 
 class AttrDict(dict):
@@ -63,10 +73,10 @@ para = AttrDict(
     'lr_min': 1e-5,
 
     'accum_steps': 1,
-    'batch_size': BATCH_SIZE,
+    'batch_size': 4,
 
     'weight_decay': 0.004,
-    'ema_momentum': 0.99,
+    'ema_momentum': 0.9, #0.99,
 
     'host': "localhost",
     'port': 5557,
@@ -74,25 +84,80 @@ para = AttrDict(
 
     'log_interval': 5,
     'save_interval': 30,
-    'validate_interval': 60
+    'validate_interval': 60,
 
-    # 'ckpt_load_path': f'ckpt/modelB6-{1050}.h5',
+    # 'ckpt_load_path': f'ckpt/modelB6-{90}.h5',
   }
 ) 
 
 
-def get_data(hwm, host, port):
-  for tup in client_generator(hwm=hwm, host=host, port=port):
-    Ximgs_rgb, Xin1, Xin2, Xin3, Ytrue0, Ytrue1, Ytrue2, Ytrue3, Ytrue4,\
-                           Ytrue5, Ytrue6, Ytrue7, Ytrue8, Ytrue9, Ytrue10, Ytrue11 = tup
+# def get_data(hwm, host, port):
+#   for tup in client_generator(hwm=hwm, host=host, port=port):
+#     Ximgs_rgb, Xin1, Xin2, Xin3, Ytrue0, Ytrue1, Ytrue2, Ytrue3, Ytrue4,\
+#                            Ytrue5, Ytrue6, Ytrue7, Ytrue8, Ytrue9, Ytrue10, Ytrue11 = tup
  
-    Xins  = [*tup[:4]]
-    Xins = [tf.convert_to_tensor(x, dtype=tf.float32) for x in Xins]
+#     Xins  = [*tup[:4]]
+#     Xins = [tf.convert_to_tensor(x, dtype=tf.float32) for x in Xins]
 
-    Ytrue = np.hstack(tup[4:])
-    Ytrue = tf.convert_to_tensor(Ytrue, dtype=tf.float32)
+#     Ytrue = np.hstack(tup[4:])
+#     Ytrue = tf.convert_to_tensor(Ytrue, dtype=tf.float32)
  
-    yield Xins, Ytrue
+#     yield Xins, Ytrue
+
+
+
+def get_data(pkl_files):
+
+    file_idx = 0
+    while(1):
+
+        pkl_file = pkl_files[file_idx]
+        print(f'## get data: {pkl_file}')
+        file_idx += 1
+        if(file_idx >= len(pkl_files)): file_idx = 0
+ 
+            
+        with open(pkl_file, 'rb') as f:      
+
+            data = pickle.load(f)   
+
+            n = data['Ximgs'].shape[0]
+            
+            assert data['Ximgs'].shape == (n, 12, 128, 256)
+            assert data['Xin1'].shape == (n, 8)
+            assert data['Xin2'].shape == (n, 2)
+            assert data['Xin3'].shape == (n, 512)
+            
+
+            Y_shapes = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
+            Y_dim = sum(Y_shapes)
+
+            for i in range(12):
+                assert data['Y'][i].shape == (n, Y_shapes[i])
+            
+        
+        n_batches = n // para.batch_size
+        for b in range(n_batches):
+
+            i1 = b * para.batch_size
+            i2 = (b+1) * para.batch_size
+            if(i2 > n): break
+             
+
+            Xins  = [data['Ximgs'][i1:i2], data['Xin1'][i1:i2], data['Xin2'][i1:i2], data['Xin3'][i1:i2]]
+            Xins = [tf.convert_to_tensor(x, dtype=tf.float32) for x in Xins]
+
+            # Ytrue = np.hstack(tup[4:])
+            Ytrue = [data['Y'][i][i1:i2] for i in range(12)]
+            Ytrue = np.hstack(Ytrue)
+            assert Ytrue.shape == (para.batch_size, Y_dim)
+            Ytrue = tf.convert_to_tensor(Ytrue, dtype=tf.float32)
+        
+            print(f'## yield batch: {b} of file {file_idx}')
+            yield Xins, Ytrue
+
+
+
 
 
 
@@ -126,8 +191,17 @@ if 'ckpt_load_path' in para:
 optimizer = tf.keras.optimizers.AdamW(learning_rate=para.base_lr,
                   weight_decay=para.weight_decay, ema_momentum=para.ema_momentum)        
 
-train_dataset = get_data(20, para.host, port=para.port)
-val_dataset = get_data(20, para.host, port=para.port_val)
+# train_dataset = get_data(20, para.host, port=para.port)
+# val_dataset = get_data(20, para.host, port=para.port_val)
+
+
+pkl_files = glob.glob("/home/richard/dataB6/*/data.pkl")
+assert len(pkl_files) == 3
+print(f'pkl_files: {pkl_files}')
+
+
+train_dataset = get_data(pkl_files[0:2])
+val_dataset = get_data(pkl_files[2:3])
 
 
 def validate(n=5):
@@ -204,6 +278,9 @@ def _train_step(X_step, Y_step):
 
 
 
+with open("log.txt", "w") as f: f.write("")
+
+ 
 update_counts = 0
 for epoch in range(10000):
 
@@ -222,37 +299,42 @@ for epoch in range(10000):
         step_size = para.batch_size // para.accum_steps
         
         for step in range(para.accum_steps): 
-            
+          
+            # print(f"## (len(tf.config.experimental.list_physical_devices('GPU'))): {(len(tf.config.experimental.list_physical_devices('GPU')))}")
             X_step = [a[step*step_size:(step+1)*step_size] for a in X]
             Y_step = Y[step*step_size:(step+1)*step_size]
  
             loss, metric, grad = _train_step(X_step, Y_step)
-           
+ 
             for i in range(len(accum_gradients)):
                  
                 accum_gradients[i] += grad[i]
             
-
+             
             total_loss += loss.numpy() 
             total_metric += metric.numpy() 
 
+       
         averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
         clipped_grads, _ = tf.clip_by_global_norm(averaged_gradients, para.grad_norm_clip)
         optimizer.apply_gradients(zip(clipped_grads, model.trainable_variables))
 
-
+     
         update_counts += 1
         lr_next = lr_scheduler(update_counts)
         tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
 
 
         if update_counts % para.log_interval == 0:
-            print(f'[{update_counts}] train loss: {total_loss / para.accum_steps}' + \
-            f', train metric: {total_metric / para.accum_steps}' + f', lr: {lr_next}')
+            log = f'[{update_counts}] train loss: {total_loss / para.accum_steps}' + \
+            f', train metric: {total_metric / para.accum_steps}' + f', lr: {lr_next}' 
+            # print(log)
+            with open("log.txt", "a") as f: f.write(log + '\n')
 
+        
 
-        if update_counts % para.validate_interval == 0:
-            loss, metric = validate()                
+        # if update_counts % para.validate_interval == 0:
+        #     loss, metric = validate()                
         
 
         if update_counts % para.save_interval == 0:

@@ -48,7 +48,7 @@ def RGB_to_sYUVs(video, frame_count):
     bYUV = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV_I420)  # BGR is slightly different from RGB
 
       
-    bYUVs.append(bYUV.reshape((874*3//2, 1164))) # 874*3//2 = 1311
+    bYUVs.append(bYUV.reshape((874*3//2, 1164))) # no effect, has same shape before and after.
     
       #--- bYUV.shape = (1311, 1164) # TFNs = 874*1164*3/2 bytes
       #--- np.shape(bYUVs) = (10, 1311, 1164)
@@ -133,6 +133,8 @@ def getFrame_rgb():
             
             # print(f'count: {count}')
             exit()
+
+
 
 def makeYUV(all_dirs):
   #all_videos = ['/home/richard/dataB/'+i+'/video.hevc' for i in all_dirs]

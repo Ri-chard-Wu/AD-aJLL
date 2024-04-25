@@ -33,9 +33,9 @@ from common.transformations.model import medmodel_intrinsics
 from lanes_image_space import transform_points
 from cameraB3 import transform_img, eon_intrinsics
 from parserB6 import parser
-
-camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--32/video.hevc'
-# camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--33/video.hevc'
+from modelB6 import get_model
+# camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--32/video.hevc'
+camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--33/video.hevc'
 # camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--37/video.hevc'
 # camerafile = '/home/richard/openpilot/tools/replay/dataC/8bfda98c9c9e4291|2020-05-11--03-00-57/61/fcamera.hevc'
 
@@ -43,10 +43,10 @@ camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--32/video.hevc'
 #supercombo = load_model('models/supercombo079.keras', compile = False)   # 12 outs
 #print(supercombo.summary())
 
-supercombo = get_model()
-supercombo.load_weights(f'ckpt/modelB6-{1050}.h5')  # for retraining
+# supercombo = get_model()
+# supercombo.load_weights(f'ckpt/modelB6-{3300}.h5')  # for retraining
 
-
+supercombo = load_model('saved_model/supercombo079.keras', compile=False)
 
 
 '''
@@ -89,11 +89,14 @@ def plot_label(frame_no, x_left, y_left, x_path, y_path, x_right, y_right):
   if cv2.waitKey(1000) == 27:   # if ENTER is pressed
     cv2.destroyAllWindows()
   cv2.destroyAllWindows()
+
     #cv2.imwrite('output.png', pic)
 '''
 bRGB (874, 1164, 3) = (H, W, C) <=> bYUV (1311, 1164) <=>  CbYUV (6, 291, 582) = (C, H, W) [key: 1311 =  874x3/2]
 sRGB (256,  512, 3) = (H, W, C) <=> sYUV  (384,  512) <=>  CsYUV (6, 128, 256) = (C, H, W) [key:  384 =  256x3/2]
 '''
+
+
 def sYUVs_to_CsYUVs(sYUVs):   # see hevc2yuvh5.py and main.py
     #--- sYUVs.shape = (2, 384, 512)
   H = (sYUVs.shape[1]*2)//3   # = 384x2//3 = 256
@@ -110,11 +113,16 @@ def sYUVs_to_CsYUVs(sYUVs):   # see hevc2yuvh5.py and main.py
 
   return CsYUVs  #--- CsYUVs.shape = (2, 6, 128, 256)
 
-sYUVs = np.zeros((2, 384, 512), dtype=np.uint8)
-desire = np.zeros((1, 8))
-traffic_convection = np.zeros((1, 2))
-state = np.zeros((1, 512))
 
+
+sYUVs = np.zeros((2, 384, 512), dtype='float32')
+desire = np.zeros((1, 8), dtype='float32')
+traffic_convection = np.zeros((1, 2), dtype='float32')
+state = np.zeros((1, 512), dtype='float32')
+
+# desire[:, 0] = 1.0
+# traffic_convection[:, 0] = 1.0
+ 
 cap = cv2.VideoCapture(camerafile)
 
 x_lspace = np.linspace(1, PATH_DISTANCE, PATH_DISTANCE)   # linear spacing: linspace(start, stop, num), num: total number of items (pionts)
@@ -130,45 +138,43 @@ else:
                            output_size=(512, 256))   # resize bYUVs to small YUVs
     #--- sYUVs.shape = (2, 384, 512)
 
+
 fig = plt.figure('OPNet Simulator')
+
 
 #while True:
 # for i in range(3):
-for i in range(500):
+for i in range(1200):
   (ret, current_frame) = cap.read()
-  if not ret:
-       break
+  if not ret: break
   frame_no += 1
 
   frame = current_frame.copy()
-  bYUV = cv2.cvtColor(current_frame, cv2.COLOR_BGR2YUV_I420)
+  bYUV = cv2.cvtColor(current_frame, cv2.COLOR_BGR2YUV_I420) # shape: (1311, 1164).
+
+ 
+
   sYUVs[1] = transform_img(bYUV, from_intr=eon_intrinsics, to_intr=medmodel_intrinsics, yuv=True,
                            output_size=(512, 256))
+
+
+        # sYUVs = RGB_to_sYUVs(cap, frame_count)
+        # CsYUVs = sYUVs_to_CsYUVs(sYUVs)
+        # for i in range(frame_count):
+        #   h5f['X'][i] = CsYUVs[i]
 
   if frame_no > 1:
     print("#--- frame_no =", frame_no)
     CsYUVs = sYUVs_to_CsYUVs(sYUVs)
+    # print(f'## np.vstack(CsYUVs[0:2])[None].shape: {np.vstack(CsYUVs[0:2])[None].shape}')
+    
     inputs = [np.vstack(CsYUVs[0:2])[None], desire, traffic_convection, state]
 
-    outputs = supercombo.predict(inputs)
-      #[print("#--- outputs[", i, "] =", outputs[i]) for i in range(len(outputs))]
-      #[print("#--- outputs[", i, "].shape =", np.shape(outputs[i])) for i in range(len(outputs))]
-      #print ("#--- outputs.shape =", outputs.shape)   # for B6.keras
-      #--- outputs.shape = (1, 2383)       # for B6.keras
-      #--- outputs[ 0 ].shape = (2383,)    # from B6.keras
-      #--- len(outputs) = 12               # for supercombo079.keras
-      #--- outputs[ 0 ].shape = (1, 385)   # from supercombo079.keras
-      #--- outputs[ 1 ].shape = (1, 386)
-      #--- outputs[ 2 ].shape = (1, 386)
-      #--- outputs[ 3 ].shape = (1, 58)
-      #--- outputs[ 4 ].shape = (1, 200)
-      #--- outputs[ 5 ].shape = (1, 200)
-      #--- outputs[ 6 ].shape = (1, 200)
-      #--- outputs[ 7 ].shape = (1, 8)
-      #--- outputs[ 8 ].shape = (1, 4)
-      #--- outputs[ 9 ].shape = (1, 32)
-      #--- outputs[ 10 ].shape = (1, 12)
-      #--- outputs[ 11 ].shape = (1, 512)
+    outputs = supercombo(inputs)
+    outputs = [a.numpy() for a in outputs]
+    # outputs = supercombo.predict(inputs)
+    # print(f'outputs.shape: {len(outputs)}')
+  
     if len(outputs) == 1:   # for B6.keras
       o0  = outputs[:, PATH_IDX:   LL_IDX]   #--- o0.shape = (1, 385)
       o1  = outputs[:, LL_IDX:     RL_IDX]
@@ -233,34 +239,38 @@ for i in range(500):
     plt.plot(parsed["lll"][0], range(0, PATH_DISTANCE), "r-", linewidth=1)
     plt.plot(parsed["path"][0], range(0, PATH_DISTANCE), "g-", linewidth=1)
     plt.plot(parsed["rll"][0], range(0, PATH_DISTANCE), "b-", linewidth=1)
-      #plt.legend(['lll', 'rll', 'path'])
-    plt.pause(0.001)
-    input("Press ENTER to close ...")
-    # if cv2.waitKey(1000) == 27:   # if ENTER is pressed
+
+    if(i%5==0):
+        plt.savefig(f'output/sim/sim-{i}.png')
+    # plt.show()
+    #   #plt.legend(['lll', 'rll', 'path'])
+    # plt.pause(0.001)
+    # input("Press ENTER to close ...")
+    # # if cv2.waitKey(1000) == 27:   # if ENTER is pressed
     # cv2.destroyAllWindows()
 
-    ''' plot parsed lines
-    plot_label(frame_no, new_x_left, new_y_left, new_x_path, new_y_path, new_x_right, new_y_right)
-    with open("y_true.json", "w") as f:  # use dump() to write parsed (numpy array object) into the json file f
-      json.dump(parsed, f, cls=NumpyEncoder) '''
+    # ''' plot parsed lines
+    # plot_label(frame_no, new_x_left, new_y_left, new_x_path, new_y_path, new_x_right, new_y_right)
+    # with open("y_true.json", "w") as f:  # use dump() to write parsed (numpy array object) into the json file f
+    #   json.dump(parsed, f, cls=NumpyEncoder) '''
 
-    ''' plot large image for checking the vanishing point '''
-    plt.clf()   # clear figure
-    plt.xlim(0, 1164)
-    plt.ylim(874, 0)
-    plt.plot()
-    plt.title("Original Scene")
-    new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0])
-    new_x_path, new_y_path = transform_points(x_lspace, parsed["path"][0])
-    new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
-    plt.plot(new_x_left, new_y_left, label='transformed', color='r')
-    plt.plot(new_x_path, new_y_path, label='transformed', color='g')
-    plt.plot(new_x_right, new_y_right, label='transformed', color='b')
-    plt.imshow(frame)
-    plt.pause(0.001)
-    input("Press ENTER to close ...")
-    # if cv2.waitKey(1000) == 27:   # if ENTER is pressed
-    # cv2.destroyAllWindows()
+    # ''' plot large image for checking the vanishing point '''
+    # plt.clf()   # clear figure
+    # plt.xlim(0, 1164)
+    # plt.ylim(874, 0)
+    # plt.plot()
+    # plt.title("Original Scene")
+    # new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0])
+    # new_x_path, new_y_path = transform_points(x_lspace, parsed["path"][0])
+    # new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
+    # plt.plot(new_x_left, new_y_left, label='transformed', color='r')
+    # plt.plot(new_x_path, new_y_path, label='transformed', color='g')
+    # plt.plot(new_x_right, new_y_right, label='transformed', color='b')
+    # plt.imshow(frame)
+    # plt.pause(0.001)
+    # input("Press ENTER to close ...")
+    # # if cv2.waitKey(1000) == 27:   # if ENTER is pressed
+    # # cv2.destroyAllWindows()
 
   sYUVs[0] = sYUVs[1]
 

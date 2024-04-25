@@ -17,6 +17,7 @@ from datagenB6 import datagen
 #BATCH_SIZE, STEPS, EPOCHS = 2, 4, 10   # Run Time: 00:05:20
 #BATCH_SIZE, STEPS, EPOCHS = 2, 10, 60  # Run Time: 01:06:08
 
+# os.environ['CUDA_VISIBLE_DEVICES'] = ""
 
 BATCH_SIZE, STEPS, EPOCHS = 4, 20, 60  # Run Time: 04:02:18
 
