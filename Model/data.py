@@ -42,7 +42,7 @@ def plot_path(outs, frame, dir_name, file_name):
 
     if(not os.path.exists(dir_name)):
         os.mkdir(dir_name)
-        
+
     PATH_DISTANCE = 192
     x_lspace = np.linspace(1, PATH_DISTANCE, PATH_DISTANCE)  
     
@@ -75,11 +75,11 @@ def plot_path(outs, frame, dir_name, file_name):
 
     # print(f'x, y: {x}, {y}')
 
-    plt.plot([x], [y], label='transformed', marker='^', color='y', markersize=10)
+    plt.plot([x], [y],  marker='^', color='y', markersize=10)
  
-    plt.plot(new_x_left, new_y_left, label='transformed', color='r')
-    plt.plot(new_x_path, new_y_path, label='transformed', color='g')
-    plt.plot(new_x_right, new_y_right, label='transformed', color='b')
+    plt.plot(new_x_left, new_y_left, color='r')
+    plt.plot(new_x_path, new_y_path, color='g')
+    plt.plot(new_x_right, new_y_right, color='b')
 
     plt.imshow(frame)   # Merge raw image and plot together
 
@@ -87,11 +87,11 @@ def plot_path(outs, frame, dir_name, file_name):
     plt.gca().invert_yaxis()
     plt.title("Camera View")
  
-    plt.plot(new_x_left, new_y_left, label='transformed', color='r')
-    plt.plot(new_x_path, new_y_path, label='transformed', color='g')
-    plt.plot(new_x_right, new_y_right, label='transformed', color='b')
+    plt.plot(new_x_left, new_y_left, label='left', color='r')
+    plt.plot(new_x_path, new_y_path, label='path', color='g')
+    plt.plot(new_x_right, new_y_right, label='right', color='b')
 
-    plt.legend(['left', 'path', 'right'])
+    plt.legend()
 
     plt.subplot(223)
     plt.title("Original Scene")
@@ -155,36 +155,48 @@ def worker(tid, remote, parent_remote, videos):
 
     print(f'[{tid}] done loading model...')
 
-    parent_remote.close()
+    if parent_remote is not None:
+        parent_remote.close()
    
 
     for idx, vi in enumerate(videos):
 
         output_file = vi.replace('fcamera.hevc', 'data.pkl') #.replace('/TData1/','/TData1-pp/') 
-            
+        if os.path.isfile(output_file): 
+            print(f'[{tid}] file exists: {output_file}. skip.')
+            continue
+
+
         cap = cv2.VideoCapture(vi)    
 
         ret, frame = cap.read() 
         YUV_next = RGB_to_YUV(frame)
         ret, frame = cap.read() 
 
-        T = 1200
+        # T = 1200
 
-        Xin3 = np.zeros((T, 512))
-        rnn_st_next = Xin3[0]
+        # Xin3 = np.zeros((T, 512))
+        # rnn_st_next = Xin3[0]
+        
+        Xin3 = []
+        rnn_st_next = np.zeros((512, ))
+        
 
-        Y_shapes = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
-        Y = [np.zeros((T, s), dtype='float32') for s in Y_shapes]
+        Y_shape = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
+        # Y = [np.zeros((T, s), dtype='float32') for s in Y_shapes]
+        Y = [[] for i in range(12)]
     
         t = 0
         while ret:
-            if(t % 50 == 0):
-                print(f'[{tid}] t: {t}')
-
+            # if(t % 50 == 0):
+            #     print(f'[{tid}] t: {t}')
+            # if(t>10):break
             YUV = YUV_next 
             YUV_next = RGB_to_YUV(frame)
 
-            Xin3[t] = rnn_st_next
+            # Xin3[t] = rnn_st_next
+            Xin3.append(rnn_st_next[None])
+
  
             Ximg = np.vstack((YUV, YUV_next))[None]
             assert Ximg.shape == (1, 12, 128, 256)
@@ -205,7 +217,8 @@ def worker(tid, remote, parent_remote, videos):
             assert len(outs) == 12
 
             for i in range(len(outs)):
-                Y[i][t] = outs[i]
+                # Y[i][t] = outs[i]
+                Y[i].append(outs[i])
 
 
             t+=1
@@ -213,6 +226,10 @@ def worker(tid, remote, parent_remote, videos):
 
         cap.release()
 
+        Xin3 = np.concatenate(Xin3)
+        assert Xin3.shape == (t, 512)
+
+        Y = [np.concatenate(y) for y in Y]
 
         data = {'Xin3': Xin3, 'Y': Y}
 
@@ -226,6 +243,7 @@ def worker(tid, remote, parent_remote, videos):
             
             for i in range(12):
                 assert (data_rd['Y'][i] == Y[i]).all()
+                assert data_rd['Y'][i].shape == (t, Y_shape[i])
             
 
         print(f'[{tid}] completed {idx+1} / {len(videos)}: {output_file}') 
@@ -424,101 +442,9 @@ if __name__ == "__main__":
     
     print(f'load dists: {[len(video_batch) for video_batch in video_batchs]}')
     
-    VecEnv(n_workers, video_batchs)
+    VecEnv(n_workers-1, video_batchs[:-1])
     
     while(1):
-        a = 1
+        worker(n_workers-1, None, None, video_batchs[n_workers-1])
         
-
-
-    # batch_size = 8
-    # n_batchs = len(all_videos) // batch_size
-    
-    # # for vi in all_videos:
-    # for i in range(n_batchs):        
-
-    #     batch = all_videos[i*batch_size:(i+1)*batch_size]
-
-    #     # yuvh5 = vi.replace('video.hevc','yuv.h5')
-    #     # frames_rgb = read_hevc(vi)
-
-    #     # yuvh5 = vi.replace('fcamera.hevc','yuv.h5')
-    #     # yuvh5 = yuvh5.replace('/TData1/','/TData1-pp/')
-
-    #     output_files = [vi.replace('fcamera.hevc', 'data.pkl').replace('/TData1/','/TData1-pp/') for vi in batch]
-        
-    #     # yuvh5 = vi.replace('video.hevc','test.h5')
-    #     # print("## video =", vi)
-    
-    #     caps = [cv2.VideoCapture(vi) for vi in batch]    
-
-    #     rets, frames = zip(*[cap.read() for cap in caps])
-    #     YUVs_next = [RGB_to_YUV(frame) for frame in frames] 
-
-    #     rets, frames = zip(*[cap.read() for cap in caps])
-    #     # if not np.array(rets).all(): continue
-    #     # YUVs_next = [RGB_to_YUV(frame) for frame in frames] 
-
-    #     rnn_sts = np.zeros((batch_size, 512))
-
-    #     Xin3s = [[] for i in range(batch_size)]
-    #     Ys = [[] for i in range(batch_size)]
-
-    #     while np.array(rets).any():
-
-    #         # sYUVs = [RGB_to_sYUVs(frame) for frame in frames] 
-    #         # CsYUVs = [sYUVs_to_CsYUVs(sYUV) for sYUV in sYUVs]
-    #         YUVs = YUVs_next
-    #         # for i in range(batch_size):
-    #         #     frame = frames[i]
-    #         #     if(not rets[i]): frame = YUVs[i]
-    #         #     YUVs_next = [RGB_to_YUV(frame) for frame in frames] 
-
-    #         YUVs_next = [frames[i] if rets[i] else YUVs[i] for i in range(batch_size)]
-
-    #         # vsX1 = yuvX[i]
-    #         # vsX2 = yuvX[i+1]
-
-    #         # # X[0][i] = frames_rgb[i]
-
-    #         # # Ximgs[i] = np.vstack((vsX1, vsX2))  
-    #         # Ximg = np.vstack((vsX1, vsX2)) 
  
-    #         Ximgs = np.concatenate([np.vstack((YUVs[i], YUVs_next[i]))[None] for i in range(batch_size)])
-    #         assert Ximgs.shape == (b, 12, 128, 256)
-  
-    #         outs = supercombo([Ximgs, np.zeros((batch_size, 8)), np.zeros((batch_size, 2)), rnn_sts])
-  
-            
-    #         for i in range(batch_size):
-    #             Xin3s[i].append(rnn_sts[i])
-    #             Ys[i].append(outs[i])
-
-
-
-
-
-    #         rnn_sts = outs[11][:] # (batch_size, 512)
-                
-    #         assert len(outs) == 12
-
-    #         for j in range(len(outs)):
-    #             Y[i] = outs[j]
-
-
-    #         # outs = supercombo_y(Ximg, np.zeros((8, )), np.zeros((2, )), rnn_st)
-
-    #         rets, frames = zip(*[cap.read() for cap in caps])
-
-
-    #     for cap in caps: cap.release()
-
-    # # models = [load_model('saved_model/supercombo079.keras', compile=False) for i in range(8)]
-
-    # # while(1):
-    # #     for i in range(8):
-    # #         models[i]([[np.zeros((1, 12, 128, 256)), np.zeros((1, 8)), np.zeros((1, 2)), np.zeros((1, 512))]])
-    # #     print('passed')
-
-
-
