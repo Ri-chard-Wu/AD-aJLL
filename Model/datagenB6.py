@@ -44,10 +44,7 @@ import time
 from tqdm import tqdm
 
 
- 
-# os.environ['CUDA_VISIBLE_DEVICES'] = ""
-
-# with tf.device('/CPU:0'):
+  
 supercombo = load_model('saved_model/supercombo079.keras', compile=False)  
 
 
@@ -185,146 +182,8 @@ def read_hevc(hevc_file):
     
     return frames_rgb
 
-
-          
-# def datagen(batch_size, camera_files):
-#   print('################################')
-#   # 2 yub imgs.
-#   Ximgs  = np.zeros((batch_size, 12, 128, 256), dtype='float32')   # Is YUV input img uint8? No. See float8 ysf = convert_float8(ys) in loadyuv.cl
-
-#   # Ximgs_rgb  = np.zeros((batch_size, 256, 256, 3), dtype='float32') 
-
-
-#   Xin1   = np.zeros((batch_size, 8), dtype='float32')     # DESIRE_LEN = 8
-#   Xin2   = np.zeros((batch_size, 2), dtype='float32')     # TRAFFIC_CONVENTION_LEN = 2
-#   Xin3   = np.zeros((batch_size, 512), dtype='float32')   # rnn state
-  
-#   Y_shapes = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
-#   Y = [np.zeros((batch_size, s), dtype='float32') for s in Y_shapes]
-
-#   # Ytrue0 = np.zeros((batch_size, 385), dtype='float32')
-#   # Ytrue1 = np.zeros((batch_size, 386), dtype='float32')
-#   # Ytrue2 = np.zeros((batch_size, 386), dtype='float32')
-#   # Ytrue3 = np.zeros((batch_size, 58), dtype='float32')
-#   # Ytrue4 = np.zeros((batch_size, 200), dtype='float32')
-#   # Ytrue5 = np.zeros((batch_size, 200), dtype='float32')
-#   # Ytrue6 = np.zeros((batch_size, 200), dtype='float32')
-#   # Ytrue7 = np.zeros((batch_size, 8), dtype='float32')
-#   # Ytrue8 = np.zeros((batch_size, 4), dtype='float32')
-#   # Ytrue9 = np.zeros((batch_size, 32), dtype='float32')
-#   # Ytrue10 = np.zeros((batch_size, 12), dtype='float32')
-#   # Ytrue11 = np.zeros((batch_size, 512), dtype='float32')
-
-#   # Xin1[:, 0] = 1.0   # go straight? desire_state_prob[0] = 1.0
-#   # Xin2[:, 0] = 1.0   # traffic_convention[0] = 1.0 = left hand drive like in Taiwan
-
-
-  
-#   hevc_files = glob.glob("/home/richard/dataB6/*/video.hevc")
-#   yuv_files = glob.glob("/home/richard/dataB6/*/yuv.h5")
-  
-  
-
-#   print(f'hevc_files: {hevc_files}')
-#   print(f'yuv_files: {yuv_files}')
-
-
-
-#   Epoch = 1
-#   Xin3_temp = Xin3[0]  #--- np.shape(Xin3_temp) = (512,)
-
  
-#   while True:
-
-#       CFile = 1
-#       Step = 1
  
-#       assert len(yuv_files) == 3
-
-#       for i in range(len(yuv_files)):
-
-#           yuv_file = yuv_files[i]
-#           hevc_file = hevc_files[i]
-
-#           frames_rgb = read_hevc(hevc_file)
-
-
-#           with h5py.File(yuv_file, "r") as yuv:     
-
-#               yuvX = yuv['X'] #--- yuvX.shape = (1200, 6, 128, 256) or (1199, 6, 128, 256)               
-
-#               yuvX_len = len(yuvX)  # = 1200 or 1199
-#               lastIdx = yuvX_len - 2 - batch_size   # cannot be the last frame yuvX_len-1
-
-#               for i in range(0, lastIdx, batch_size):
-
-#                   print("#--- Epoch:", Epoch, " Step:", Step, " CFile:", CFile)
-
-#                   bcount = 0
-
-#                   while bcount < batch_size:
-                      
-#                       vsX1 = yuvX[bcount+i]
-#                       vsX2 = yuvX[bcount+i+1]
-
-#                       # rgb = frames_rgb[bcount+i]
-
-#                         #--- vsX2.shape = (6, 128, 256)
-#                       Ximgs[bcount] = np.vstack((vsX1, vsX2))  
-#                         #--- Ximgs[bcount].shape = (12, 128, 256)
-                      
-#                       # Ximgs_rgb[bcount] = frames_rgb[bcount+i]
-
-#                       Xin3[bcount] = Xin3_temp
-
-
-#                       # start_time = time.time()
-#                       outs = supercombo_y(Ximgs[bcount], Xin1[bcount], Xin2[bcount], Xin3[bcount])
-#                       # print(f'dt: {time.time() - start_time} sec')
-                       
-#                       # print(f'outs.shape: {outs.shape}')
-
-#                       if((bcount+i) % 10 == 0):
-#                           plot_path(outs, frames_rgb[bcount+i], bcount+i)
-
-#                         #--- len(outs) = 12
-#                       Xin3_temp = outs[11][0]
-#                         #--- np.shape(outs[11][0]) = (512,)  np.shape(outs[11]) = (1, 512)
-
-#                       Ytrue0[bcount] = outs[0]
-#                       Ytrue1[bcount] = outs[1]
-#                       Ytrue2[bcount] = outs[2]
-#                       Ytrue3[bcount] = outs[3]
-#                       Ytrue4[bcount] = outs[4]
-#                       Ytrue5[bcount] = outs[5]
-#                       Ytrue6[bcount] = outs[6]
-#                       Ytrue7[bcount] = outs[7]
-#                       Ytrue8[bcount] = outs[8]
-#                       Ytrue9[bcount] = outs[9]
-#                       Ytrue10[bcount] = outs[10]
-#                       Ytrue11[bcount] = outs[11]
-
-#                       assert len(outs) == 12
-
-#                       for i in len(outs):
-#                           Y[i][bcount] = outs[i]
-
-#                       bcount += 1
-
-#                   yield Ximgs, Xin1, Xin2, Xin3, Ytrue0, Ytrue1, Ytrue2, \
-#                             Ytrue3, Ytrue4, Ytrue5, Ytrue6, Ytrue7, Ytrue8, Ytrue9, Ytrue10, Ytrue11
-                  
-#                   Step += 1
-
-#           CFile += 1
-
-#       Epoch += 1
-
-
-
-
-
-          
 def datagen(batch_size=None, camera_files=None):
  
     
@@ -351,12 +210,7 @@ def datagen(batch_size=None, camera_files=None):
 
             yuvX_len = yuv['X'].shape[0] 
             yuvX = yuv['X'] #--- yuvX.shape = (1200, 6, 128, 256) or (1199, 6, 128, 256)               
-
-
-            # yuvX_len = 10
-
-
-
+ 
 
             Ximgs  = np.zeros((yuvX_len-1, 12, 128, 256), dtype='float32')    
             Xin1   = np.zeros((yuvX_len-1, 8), dtype='float32')     # DESIRE_LEN = 8

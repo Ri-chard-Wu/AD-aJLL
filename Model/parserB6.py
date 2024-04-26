@@ -62,11 +62,13 @@ def parser(outs):
     LEAD_MDN_N = 5 probs (weights) for 5 groups (MDN = Mixture Density Networks https://www.katnoria.com/mdn/)
     Networks?? or just Mixture Density?? SELECTION 3 = 3 groups (lead now, in 2s and 6s),
     MDN_GROUP_SIZE = 11 = 4 lead_xyva + 4 lead_xyva_std + 3 lead_weights (0, 2, 6s),
+    
     58 = LEAD_MDN_N * MDN_GROUP_SIZE + SELECTION,
+
     Find the distribution that corresponds to the current lead (0s) '''
-  lead_reshaped = lead[:, :-3].reshape((-1, 5, 11))   # lead.shape = (1, 58)
-    #print("#--- lead_reshaped =", lead_reshaped)  # see sim_output0_11.txt
-    #--- lead_reshaped.shape = (1, 5, 11)
+  lead_reshaped = lead[:, :-3].reshape((-1, 5, 11))   # lead.shape = (1, 58) # lead_reshaped.shape = (1, 5, 11)
+    
+    
   lead_weights = softmax(lead_reshaped[:, :, 8])
     #--- lead_weights.shape = (1, 5)
   lidx = np.argmax(lead_weights[0])   #--- lidx = 4 or 2

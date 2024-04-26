@@ -45,6 +45,7 @@ for i in range(4*3):
 
 StartPt, PATH_DISTANCE = 4, 192
 
+
 def transform_points(x, y):
   new_x = []
   new_y = []
@@ -67,3 +68,21 @@ def transform_points(x, y):
     new_y.append(p_full_frame[1])
     # i += 1
   return new_x[StartPt:], new_y[StartPt:]
+
+
+
+
+def transform_point(x, y):
+ 
+
+  p_car_space = np.array([x, y, 0., 1.])
+  
+  Ep4 = np.matmul(extrinsic_matrix_eigen, p_car_space)
+
+  Ep = np.array([Ep4[0], Ep4[1], Ep4[2]])
+  
+  KEp = np.dot(intrinsic_matrix, Ep)
+
+  p_full_frame = np.array([KEp[0] / KEp[2], KEp[1] / KEp[2], 1.])
+    
+  return p_full_frame[0], p_full_frame[1]

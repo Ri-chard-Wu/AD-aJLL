@@ -29,31 +29,20 @@ from PIL import Image
 
 
 
-def RGB_to_sYUVs(video, frame_count):
+def RGB_to_sYUVs(video):
+
+
   bYUVs = []
-  for i in range(frame_count):
 
+  ret, frame = video.read()
 
-    # frame; rgb img.
-    ret, frame = video.read()  #--- ret =  True
-      #--- frame.shape = (874, 1164, 3) = (H, W, C) = (row, col, dep) = (axis0, axis1, axis2)
+  while ret:
 
-    # print(f'frame.shape: {frame.shape}')
+    bYUV = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV_I420) # (1311, 1164)
+    bYUVs.append(bYUV.reshape((874*3//2, 1164))) # no effect, has same shape before and after.     
+    ret, frame = video.read()
 
-    # save_frame('output', 'test.jpeg', frame)
-
-    # exit()
-
-    #--- np.shape(bYUV) = (1311, 1164)
-    bYUV = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV_I420)  # BGR is slightly different from RGB
-
-      
-    bYUVs.append(bYUV.reshape((874*3//2, 1164))) # no effect, has same shape before and after.
-    
-      #--- bYUV.shape = (1311, 1164) # TFNs = 874*1164*3/2 bytes
-      #--- np.shape(bYUVs) = (10, 1311, 1164)
-
-
+  
   sYUVs = np.zeros((len(bYUVs), 384, 512), dtype=np.uint8) # np.uint8 = 0~255
 
   for i, img in tqdm(enumerate(bYUVs)):
@@ -99,73 +88,41 @@ def save_frame(dir_name, name, frame):
 
 
 
-
-
-
-def getFrame_rgb():
-    
-    # print(f'glob: {glob.glob("/home/richard/dataB6/*/video.hevc")}')
-
-    all_videos = glob.glob("/home/richard/dataB6/*/video.hevc")
-
-    for vi in all_videos:
-
-        # fr = FrameReader(vi)
-        # frame_count = fr.frame_count # 1199
-        
-        cap = cv2.VideoCapture(vi)
-
-        # sYUVs = RGB_to_sYUVs(cap, frame_count)
-  
-        
-        ret, frame = cap.read()  #--- ret =  True   
-        count = 0
-        while ret: 
-            count += 1   
-
-            img = Image.fromarray(frame)
-            img = img.resize((256, 256), Image.BILINEAR) 
-            img = np.array(img) # (84, 84, 3)
-
-            # save_frame('output', 'test.jpeg', img)
-            print(f'img.shape: {img.shape}')
-            ret, frame = cap.read() 
-            
-            # print(f'count: {count}')
-            exit()
-
-
-
-def makeYUV(all_dirs):
+def makeYUV(all_videos):
   #all_videos = ['/home/richard/dataB/'+i+'/video.hevc' for i in all_dirs]
-  all_videos = ['/home/richard/dataB6/'+i+'/video.hevc' for i in all_dirs]
+  # all_videos = ['/home/richard/dataB6/'+i+'/video.hevc' for i in all_dirs]
 
   
   for vi in all_videos:
     # yuvh5 = vi.replace('video.hevc','yuv.h5')
-    yuvh5 = vi.replace('video.hevc','test.h5')
-    print("#--- video =", vi)
+    yuvh5 = vi.replace('fcamera.hevc','yuv.h5')
+    yuvh5 = yuvh5.replace('/TData1/','/TData1-pp/')
+    
+    # yuvh5 = vi.replace('video.hevc','test.h5')
+    print("## video =", vi)
  
 
     if not os.path.isfile(yuvh5):
-      fr = FrameReader(vi)
-      frame_count = fr.frame_count
-      print('#--- frame_count =', frame_count)
-      cap = cv2.VideoCapture(vi)
 
+      # fr = FrameReader(vi)
+      # frame_count = fr.frame_count
+      # print('#--- frame_count =', frame_count)
+
+
+      cap = cv2.VideoCapture(vi) 
+      sYUVs = RGB_to_sYUVs(cap) 
+      CsYUVs = sYUVs_to_CsYUVs(sYUVs)
+ 
       with h5py.File(yuvh5, 'w') as h5f:
-        h5f.create_dataset('X', (frame_count, 6, 128, 256))
-          #h5f.create_dataset('X', (1150, 6, 128, 256))
-
-        sYUVs = RGB_to_sYUVs(cap, frame_count)
-
-        CsYUVs = sYUVs_to_CsYUVs(sYUVs)
-
-        for i in range(frame_count):
+        h5f.create_dataset('X', (len(CsYUVs), 6, 128, 256))
+    
+        for i in range(len(CsYUVs)):
           h5f['X'][i] = CsYUVs[i]
 
-        print("#--- yuv.h5 created ...")
-        yuvh5f = h5py.File(yuvh5, 'r') # read .h5, 'w': write
+
+        # print("#--- yuv.h5 created ...")
+        # yuvh5f = h5py.File(yuvh5, 'r') # read .h5, 'w': write
+
             #--- yuvh5f.keys() = <KeysViewHDF5 ['X']>
             #--- yuvh5f['X'].shape = (1199, 6, 128, 256)
         # print(f"yuvh5f['X'].shape: {yuvh5f['X'].shape}")
@@ -175,7 +132,7 @@ def makeYUV(all_dirs):
 
     else:
       print("#--- yuv.h5 exists ...")
-      yuvh5f = h5py.File(yuvh5, 'r')  # read .h5, 'w': write
+      # yuvh5f = h5py.File(yuvh5, 'r')  # read .h5, 'w': write
 
 
 
@@ -183,4 +140,13 @@ if __name__ == "__main__":
   #all_dirs = os.listdir('/home/richard/dataB')
   all_dirs = os.listdir('/home/richard/dataB6')
   # makeYUV(all_dirs)
-  getFrame_rgb()
+
+
+
+  all_videos = glob.glob("/home/richard/Downloads/TData1/*.hevc")
+  # print(f'len(all_videos): {len(all_videos)}')
+
+  # chunk_size = len(all_videos) // 8
+
+  makeYUV(all_videos[:10])
+  # getFrame_rgb()
