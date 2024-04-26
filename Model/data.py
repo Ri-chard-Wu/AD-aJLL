@@ -48,55 +48,85 @@ def supercombo_y(Ximgs, Xin1, Xin2, Xin3):
 
 
 
-def RGB_to_sYUVs(video):
+# def RGB_to_sYUVs(video):
  
-  sYUVs = []
+#   sYUVs = []
 
-  ret, frame = video.read()
+#   ret, frame = video.read()
 
-  while ret:
+#   while ret:
 
+#     bYUV = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV_I420) # (1311, 1164)
+  
+#     sYUV = transform_img(bYUV, from_intr=eon_intrinsics, to_intr=medmodel_intrinsics,
+#                              yuv=True, output_size=(512, 256))  # (384, 512)
+    
+    
+#     sYUVs.append(sYUV[None])
+    
+#     ret, frame = video.read()
+  
+#   sYUVs = np.concatenate(sYUVs)
+  
+#   return sYUVs
+
+
+
+def RGB_to_sYUVs(frame):
+  
+   
     bYUV = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV_I420) # (1311, 1164)
-  
+
     sYUV = transform_img(bYUV, from_intr=eon_intrinsics, to_intr=medmodel_intrinsics,
-                             yuv=True, output_size=(512, 256))  # (384, 512)
+                            yuv=True, output_size=(512, 256))  # (384, 512)
     
-    
-    sYUVs.append(sYUV[None])
-    
-    ret, frame = video.read()
-  
-  sYUVs = np.concatenate(sYUVs)
-  
-  return sYUVs
+    return sYUV
 
-
-
-
-def sYUVs_to_CsYUVs(sYUVs):
-    H = (sYUVs.shape[1]*2)//3  # 384x2//3 = 256
-    W = sYUVs.shape[2]         # 512
-    CsYUVs = np.zeros((sYUVs.shape[0], 6, H//2, W//2), dtype=np.uint8)
-
-    CsYUVs[:, 0] = sYUVs[:, 0:H:2, 0::2]  # [2::2] get every even starting at 2
-    CsYUVs[:, 1] = sYUVs[:, 1:H:2, 0::2]  # [start:end:step], [2:4:2] get every even starting at 2 and ending at 4
-    CsYUVs[:, 2] = sYUVs[:, 0:H:2, 1::2]  # [1::2] get every odd index, [::2] get every even
-    CsYUVs[:, 3] = sYUVs[:, 1:H:2, 1::2]  # [::n] get every n-th item in the entire sequence
-    CsYUVs[:, 4] = sYUVs[:, H:H+H//4].reshape((-1, H//2, W//2))
-    CsYUVs[:, 5] = sYUVs[:, H+H//4:H+H//2].reshape((-1, H//2, W//2))
-
-
-
-    # CsYUVs = np.array(CsYUVs).astype(np.float32)
-
-    # print(f'CsYUVs.dtype: {CsYUVs.dtype}')
         
-    return CsYUVs
 
+# def sYUVs_to_CsYUVs(sYUVs):
+#     H = (sYUVs.shape[1]*2)//3  # 384x2//3 = 256
+#     W = sYUVs.shape[2]         # 512
+#     CsYUVs = np.zeros((sYUVs.shape[0], 6, H//2, W//2), dtype=np.uint8)
 
-
+#     CsYUVs[:, 0] = sYUVs[:, 0:H:2, 0::2]  # [2::2] get every even starting at 2
+#     CsYUVs[:, 1] = sYUVs[:, 1:H:2, 0::2]  # [start:end:step], [2:4:2] get every even starting at 2 and ending at 4
+#     CsYUVs[:, 2] = sYUVs[:, 0:H:2, 1::2]  # [1::2] get every odd index, [::2] get every even
+#     CsYUVs[:, 3] = sYUVs[:, 1:H:2, 1::2]  # [::n] get every n-th item in the entire sequence
+#     CsYUVs[:, 4] = sYUVs[:, H:H+H//4].reshape((-1, H//2, W//2))
+#     CsYUVs[:, 5] = sYUVs[:, H+H//4:H+H//2].reshape((-1, H//2, W//2))
 
  
+#     return CsYUVs
+
+def sYUVs_to_CsYUVs(sYUVs): # sYUVs: (384, 512)
+
+    
+    H = (sYUVs.shape[0]*2)//3  # 384x2//3 = 256
+    W = sYUVs.shape[1]         # 512
+    CsYUVs = np.zeros((6, H//2, W//2), dtype=np.uint8)
+
+    CsYUVs[0] = sYUVs[0:H:2, 0::2]  # [2::2] get every even starting at 2
+    CsYUVs[1] = sYUVs[1:H:2, 0::2]  # [start:end:step], [2:4:2] get every even starting at 2 and ending at 4
+    CsYUVs[2] = sYUVs[0:H:2, 1::2]  # [1::2] get every odd index, [::2] get every even
+    CsYUVs[3] = sYUVs[1:H:2, 1::2]  # [::n] get every n-th item in the entire sequence
+    CsYUVs[4] = sYUVs[H:H+H//4].reshape((H//2, W//2))
+    CsYUVs[5] = sYUVs[H+H//4:H+H//2].reshape((H//2, W//2))
+
+ 
+    return CsYUVs # (6, 128, 256)
+
+
+
+def RGB_to_YUV(frame):
+
+    if frame is None: return None
+
+    frame = RGB_to_sYUVs(frame)
+    frame = sYUVs_to_CsYUVs(frame)
+    return frame
+
+
 def save_frame(dir_name, name, frame):
     if(not os.path.exists(dir_name)):
         os.mkdir(dir_name)    
@@ -182,30 +212,16 @@ def plot_path(outs, frame, i):
     # exit()
 
 
-def datagen(output_file, yuvX, frames_rgb):
-
-     
-    yuvX_len = len(yuvX)
-
-    # Ximgs  = np.zeros((yuvX_len-1, 12, 128, 256), dtype='float32')    
-    # Xin1   = np.zeros((yuvX_len-1, 8), dtype='float32')     # DESIRE_LEN = 8
-    # Xin2   = np.zeros((yuvX_len-1, 2), dtype='float32')     # TRAFFIC_CONVENTION_LEN = 2
-    # Xin3   = np.zeros((yuvX_len-1, 512), dtype='float32')   # rnn state
-
-    # X_dtypes = [np.uint8, np.float32, np.float32, np.float32]
-    # X_cfgs = [((12, 128, 256), np.uint8), ((8,), np.float32), ((2,), np.float32), ((512,), np.float32)]
-    # X_cfgs = [((512,), np.float32)]
-
+def datagen(rnn_st, YUVs, YUVs_next):    
 
     Y_shapes = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
-    Y = [np.zeros((yuvX_len-1, s), dtype='float32') for s in Y_shapes]
-    # X = [np.zeros((yuvX_len-1, *cfg[0]), dtype=cfg[1]) for cfg in X_cfgs]
+    Y = [np.zeros((s,), dtype='float32') for s in Y_shapes]
+  
+    # Xin3 = np.zeros((512,))
 
-    Xin3 = np.zeros((yuvX_len-1, 512))
 
-
-    # rnn_st_next = Xin3[0]  
-    rnn_st_next = Xin3[0] 
+    # # rnn_st_next = Xin3[0]  
+    # rnn_st_next = Xin3[0] 
 
     for i in tqdm(range(yuvX_len-1)):
         
@@ -217,48 +233,45 @@ def datagen(output_file, yuvX, frames_rgb):
         # Ximgs[i] = np.vstack((vsX1, vsX2))  
         Ximg = np.vstack((vsX1, vsX2))  
 
-        Xin3[i] = rnn_st_next 
+        
 
-        outs = supercombo_y(Ximg, np.zeros((8, )), np.zeros((2, )), Xin3[i])
-         
-        if(i%5==0):
-            plot_path(outs, frames_rgb[i], i)
-
+        outs = supercombo_y(Ximg, np.zeros((8, )), np.zeros((2, )), rnn_st)
+          
 
         rnn_st_next = outs[11][0]
             
         assert len(outs) == 12
 
         for j in range(len(outs)):
-            Y[j][i] = outs[j]
+            Y[i] = outs[j]
 
 
     # data = {'Ximgs': Ximgs, 'Xin1': Xin1, 'Xin2': Xin2, 'Xin3': Xin3, 'Y': Y}
     data = {'Xin3': Xin3, 'Y': Y}
 
-    with open(output_file, 'wb') as f:
-        pickle.dump(data, f)    
-        print(f'generated output_file: {output_file}')          
+    # with open(output_file, 'wb') as f:
+    #     pickle.dump(data, f)    
+    #     print(f'generated output_file: {output_file}')          
 
  
-    with open(output_file, 'rb') as f:            
-        data_rd = pickle.load(f)        
+    # with open(output_file, 'rb') as f:            
+    #     data_rd = pickle.load(f)        
 
-        assert (data_rd['Xin3'] == Xin3).all()
+    #     assert (data_rd['Xin3'] == Xin3).all()
 
 
-        # assert (data_rd['Ximgs'] == Ximgs).all()
-        # assert data_rd['Ximgs'].shape == (yuvX_len-1, 12, 128, 256)
-        # assert data_rd['Xin1'].shape == (yuvX_len-1, 8)
-        # assert data_rd['Xin2'].shape == (yuvX_len-1, 2)
-        # assert data_rd['Xin3'].shape == (yuvX_len-1, 512)
+    #     # assert (data_rd['Ximgs'] == Ximgs).all()
+    #     # assert data_rd['Ximgs'].shape == (yuvX_len-1, 12, 128, 256)
+    #     # assert data_rd['Xin1'].shape == (yuvX_len-1, 8)
+    #     # assert data_rd['Xin2'].shape == (yuvX_len-1, 2)
+    #     # assert data_rd['Xin3'].shape == (yuvX_len-1, 512)
 
-        print(f'Xin3 verified.')
+    #     print(f'Xin3 verified.')
 
-        for i in range(12):
-            assert data_rd['Y'][i].shape == (yuvX_len-1, Y_shapes[i])
-            assert (data_rd['Y'][i] == Y[i]).all()
-            print(f'Y[{i}] verified.')
+    #     for i in range(12):
+    #         assert data_rd['Y'][i].shape == (yuvX_len-1, Y_shapes[i])
+    #         assert (data_rd['Y'][i] == Y[i]).all()
+    #         print(f'Y[{i}] verified.')
 
 
 
@@ -288,56 +301,105 @@ def read_hevc(hevc_file):
 
 
 
-def makeYUV(all_videos):
+if __name__ == "__main__":
+    #all_dirs = os.listdir('/home/richard/dataB')
+    all_dirs = os.listdir('/home/richard/dataB6')
+    # makeYUV(all_dirs)
+
+
+
+    all_videos = glob.glob("/home/richard/Downloads/TData1/*.hevc")
+    # print(f'len(all_videos): {len(all_videos)}')
+
+    # chunk_size = len(all_videos) // 8
+
+    # makeYUV(all_videos[3:10])
+    # getFrame_rgb()
+
+    all_videos = all_videos[3:100]
+
 
     batch_size = 8
     n_batchs = len(all_videos) // batch_size
     
-    for vi in all_videos:
-    # for i in range(n_batchs):
+    # for vi in all_videos:
+    for i in range(n_batchs):        
 
-        # batch = all_videos[i*batch_size:(i+1)*batch_size]
+        batch = all_videos[i*batch_size:(i+1)*batch_size]
 
         # yuvh5 = vi.replace('video.hevc','yuv.h5')
-        frames_rgb = read_hevc(vi)
+        # frames_rgb = read_hevc(vi)
 
         # yuvh5 = vi.replace('fcamera.hevc','yuv.h5')
         # yuvh5 = yuvh5.replace('/TData1/','/TData1-pp/')
 
-        output_file = vi.replace('fcamera.hevc', 'data.pkl').replace('/TData1/','/TData1-pp/')
+        output_files = [vi.replace('fcamera.hevc', 'data.pkl').replace('/TData1/','/TData1-pp/') for vi in batch]
         
         # yuvh5 = vi.replace('video.hevc','test.h5')
-        print("## video =", vi)
+        # print("## video =", vi)
     
-        cap = cv2.VideoCapture(vi) 
-        sYUVs = RGB_to_sYUVs(cap) 
-        CsYUVs = sYUVs_to_CsYUVs(sYUVs)
+        caps = [cv2.VideoCapture(vi) for vi in batch]    
 
-        cap.release()
-        
-        datagen(output_file, CsYUVs, frames_rgb)
+        rets, frames = zip(*[cap.read() for cap in caps])
+        YUVs_next = [RGB_to_YUV(frame) for frame in frames] 
+
+        rets, frames = zip(*[cap.read() for cap in caps])
+        # if not np.array(rets).all(): continue
+        # YUVs_next = [RGB_to_YUV(frame) for frame in frames] 
+
+        rnn_sts = np.zeros((batch_size, 512))
+
+        Xin3s = [[] for i in range(batch_size)]
+        Ys = [[] for i in range(batch_size)]
+
+        while np.array(rets).any():
+
+            # sYUVs = [RGB_to_sYUVs(frame) for frame in frames] 
+            # CsYUVs = [sYUVs_to_CsYUVs(sYUV) for sYUV in sYUVs]
+            YUVs = YUVs_next
+            # for i in range(batch_size):
+            #     frame = frames[i]
+            #     if(not rets[i]): frame = YUVs[i]
+            #     YUVs_next = [RGB_to_YUV(frame) for frame in frames] 
+
+            YUVs_next = [frames[i] if rets[i] else YUVs[i] for i in range(batch_size)]
+
+            # vsX1 = yuvX[i]
+            # vsX2 = yuvX[i+1]
+
+            # # X[0][i] = frames_rgb[i]
+
+            # # Ximgs[i] = np.vstack((vsX1, vsX2))  
+            # Ximg = np.vstack((vsX1, vsX2)) 
+ 
+            Ximgs = np.concatenate([np.vstack((YUVs[i], YUVs_next[i]))[None] for i in range(batch_size)])
+            assert Ximgs.shape == (b, 12, 128, 256)
+  
+            outs = supercombo([Ximgs, np.zeros((batch_size, 8)), np.zeros((batch_size, 2)), rnn_sts])
+  
+            
+            for i in range(batch_size):
+                Xin3s[i].append(rnn_sts[i])
+                Ys[i].append(outs[i])
 
 
 
 
-if __name__ == "__main__":
-  #all_dirs = os.listdir('/home/richard/dataB')
-  all_dirs = os.listdir('/home/richard/dataB6')
-  # makeYUV(all_dirs)
+
+            rnn_sts = outs[11][:] # (batch_size, 512)
+                
+            assert len(outs) == 12
+
+            for j in range(len(outs)):
+                Y[i] = outs[j]
 
 
+            # outs = supercombo_y(Ximg, np.zeros((8, )), np.zeros((2, )), rnn_st)
 
-  all_videos = glob.glob("/home/richard/Downloads/TData1/*.hevc")
-  # print(f'len(all_videos): {len(all_videos)}')
-
-  # chunk_size = len(all_videos) // 8
-
-  makeYUV(all_videos[3:10])
-  # getFrame_rgb()
+            rets, frames = zip(*[cap.read() for cap in caps])
 
 
-
-
+        for cap in caps: cap.release()
 
 
 
