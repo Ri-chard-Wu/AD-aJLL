@@ -102,6 +102,7 @@ def plot_path(outs, frame, dir_name, file_name):
 
     plt.subplot(224)
     plt.gca().invert_xaxis()
+
       # Needed to invert axis because standard left lane is positive and right lane is negative, so we flip the x axis
     plt.title("Top-Down View")
     plt.plot(parsed["lll"][0], range(0, PATH_DISTANCE), "r-", linewidth=1)
@@ -304,8 +305,7 @@ class VecEnv():
  
 
 
-if __name__ == "__main__": 
-    all_dirs = os.listdir('/home/richard/dataB6')
+if __name__ == "__main__":     
  
     all_videos = glob.glob("/home/richard/Downloads/TData1/*.hevc")
  
@@ -321,7 +321,13 @@ if __name__ == "__main__":
     
     VecEnv(n_workers-1, video_batchs[:-1])
     
-    while(1):
-        worker(n_workers-1, None, None, video_batchs[n_workers-1])
+    
+    worker(n_workers-1, None, None, video_batchs[n_workers-1])
         
  
+    count = 0
+    for vi in all_videos:
+        data_file = vi.replace("fcamera.hevc", "data.pkl")
+        assert os.path.isfile(data_file), data_file
+        count += 1
+    print(f'all data file verified: {count}')

@@ -153,6 +153,41 @@ fig = plt.figure('OPNet Simulator')
 
 
 
+
+
+
+
+
+
+
+
+def draw_path(img, path):
+
+    new_xl_path, new_yl_path = transform_points(x_lspace, path-1)
+    new_xr_path, new_yr_path = transform_points(x_lspace, path+1)
+
+
+    fill_color=(128,0,255)
+    line_color=(0,255,0)
+    for i in range(1, len(new_xl_path)):
+
+        # u1,v1,u2,v2 = np.append(img_pts_l[i-1], img_pts_r[i-1])
+        # u3,v3,u4,v4 = np.append(img_pts_l[i], img_pts_r[i])
+
+        u1,v1,u2,v2 = new_xl_path[i-1], new_yl_path[i-1], new_xr_path[i-1], new_yr_path[i-1]
+        u3,v3,u4,v4 = new_xl_path[i], new_yl_path[i], new_xr_path[i], new_yr_path[i]
+
+
+        pts = np.array([[u1,v1],[u2,v2],[u4,v4],[u3,v3]], np.int32).reshape((-1,1,2))
+
+        if fill_color:
+            cv2.fillPoly(img,[pts],fill_color)
+
+        if line_color:
+            cv2.polylines(img,[pts],True,line_color)
+
+    return img
+
  
 
 #while True:
@@ -164,16 +199,12 @@ for i in range(1200):
 
   frame = current_frame.copy()
  
+
   sYUVs[1] = cv2.cvtColor(warp_img(frame), cv2.COLOR_BGR2YUV_I420)
+ 
 
-  # bYUV = cv2.cvtColor(current_frame, cv2.COLOR_BGR2YUV_I420) # shape: (1311, 1164).
-  # sYUVs[1] = transform_img(bYUV, from_intr=eon_intrinsics, to_intr=medmodel_intrinsics, yuv=True,
-  #                          output_size=(512, 256))
 
-        # sYUVs = RGB_to_sYUVs(cap, frame_count)
-        # CsYUVs = sYUVs_to_CsYUVs(sYUVs)
-        # for i in range(frame_count):
-        #   h5f['X'][i] = CsYUVs[i]
+
 
   if frame_no > 1:
     print("#--- frame_no =", frame_no)
@@ -217,18 +248,45 @@ for i in range(1200):
     plt.xlim(0, 1200)
     plt.ylim(800, 0)
 
+
+
+
+
+
+
+
+    # ------------------------------
+
     plt.subplot(221)   # 221: 2 rows, 2 columns, 1st sub-figure
     plt.title("Overlay Scene")
-      # lll = left lane line, path = path line, rll = right lane line
-    new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0])
-    new_x_path, new_y_path = transform_points(x_lspace, parsed["path"][0])
-    new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
+    # new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0])
+    # new_x_path, new_y_path = transform_points(x_lspace, parsed["path"][0])
 
-    plt.plot(new_x_left, new_y_left, label='transformed', color='r')
-    plt.plot(new_x_path, new_y_path, label='transformed', color='g')
-    plt.plot(new_x_right, new_y_right, label='transformed', color='b')
 
-    plt.imshow(frame)   # Merge raw image and plot together
+  
+    plt.imshow(draw_path(frame.copy(), parsed["path"][0]))
+
+    # new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
+
+    # plt.plot(new_x_left, new_y_left, label='transformed', color='r')
+    # plt.plot(new_x_path, new_y_path, label='transformed', color='g')
+    # plt.plot(new_x_right, new_y_right, label='transformed', color='b')
+
+    # plt.imshow(frame)   # Merge raw image and plot together
+
+
+
+
+
+
+
+  # ------------------------------
+
+
+
+
+
+
 
     plt.subplot(222)
     plt.gca().invert_yaxis()
@@ -257,6 +315,7 @@ for i in range(1200):
 
     if(i%5==0):
         plt.savefig(f'output/sim/sim-{i}.png')
+        print('saved img')
     # plt.show()
     #   #plt.legend(['lll', 'rll', 'path'])
     # plt.pause(0.001)
