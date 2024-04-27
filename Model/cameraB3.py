@@ -13,6 +13,8 @@ https://en.wikipedia.org/wiki/Camera_resectioning
 import math
 import numpy as np
 import common.transformations.orientation as orient
+import cv2
+
 
 FULL_FRAME_SIZE = (1164, 874)
 W, H = FULL_FRAME_SIZE[0], FULL_FRAME_SIZE[1]
@@ -146,6 +148,78 @@ def pretransform_from_calib(calib):
   camera_frame_from_calib_frame = get_camera_frame_from_calib_frame(camera_frame_from_road_frame)
   return np.linalg.inv(camera_frame_from_calib_frame)
 
+
+
+
+
+
+
+  # transform_img(bYUV, from_intr=eon_intrinsics, to_intr=medmodel_intrinsics, yuv=True,
+  #                          output_size=(512, 256))
+
+
+
+
+
+
+
+
+
+
+from common.transformations.model import medmodel_intrinsics
+
+def calibration(extrinsic_matrix, cam_intrinsics, device_frame_from_road_frame=None):
+
+    # [x, y, z] -> [x, -y, 1.51 - z].    
+    if device_frame_from_road_frame is None:
+        device_frame_from_road_frame = np.hstack((np.diag([1, -1, -1]), [[0], [0], [1.51]]))
+    
+    # device frame: x->forward, y->right, z->down
+    # view frame: x->right, y->down, z->forward 
+      
+    med_frame_from_ground = medmodel_intrinsics @ \
+            view_frame_from_device_frame @ \
+                device_frame_from_road_frame[:,(0,1,3)] # why drop z column?
+    # output of `device_frame_from_road_frame` should be in the form [x/z, y/z, w]?
+
+    ground_from_med_frame  = np.linalg.inv(med_frame_from_ground)
+
+
+    # go from car (also named road or ground) frame (x->forward, y->left, z->up) to 
+        # camera frame (x->right, y->down, z->forward) (with car frame's origin
+        # lies 1.22 meters below that of camera frame)?    
+    extrinsic_matrix_eigen = extrinsic_matrix[:3]
+
+    camera_frame_from_road_frame = np.dot(cam_intrinsics, extrinsic_matrix_eigen) # (3, 4)
+    camera_frame_from_ground = np.zeros((3,3))
+    camera_frame_from_ground[:,0] =  camera_frame_from_road_frame[:,0]
+    camera_frame_from_ground[:,1] =  camera_frame_from_road_frame[:,1]
+    camera_frame_from_ground[:,2] =  camera_frame_from_road_frame[:,3]
+    warp_matrix = np.dot(camera_frame_from_ground, ground_from_med_frame)
+
+    return warp_matrix
+
+
+
+def warp_img(img):
+ 
+  warp_matrix = calibration( 
+      extrinsic_matrix=np.array([[ 0, -1,  0,    0],
+                                  [ 0,  0, -1, 1.22],
+                                  [ 1,  0,  0,    0],
+                                  [ 0,  0,  0,    1]]),
+      cam_intrinsics=np.array([[910, 0, 582],
+                              [0, 910, 437],
+                              [0,   0,   1]]), 
+      # [x, y, z] -> [x, -y, 1.22 - z].
+      device_frame_from_road_frame=np.hstack((np.diag([1, -1, -1]), [[0], [0], [1.22]])))
+ 
+
+  return cv2.warpPerspective(src=img, M=warp_matrix, dsize=(512,256), flags=cv2.WARP_INVERSE_MAP)
+
+
+
+
 def transform_img(base_img,
                  augment_trans=np.array([0,0,0]),
                  augment_eulers=np.array([0,0,0]),
@@ -158,6 +232,7 @@ def transform_img(base_img,
                  alpha=1.0,
                  beta=0,
                  blur=0):
+
   import cv2  # pylint: disable=import-error
   cv2.setNumThreads(1)
 
@@ -166,39 +241,73 @@ def transform_img(base_img,
     base_img = cv2.cvtColor(base_img, cv2.COLOR_YUV2RGB_I420)
     #--- base_img.shape (874, 1164, 3)
 
+
+
   size = base_img.shape[:2]
   if not output_size:
     output_size = size[::-1]
 
+
+
+
+
+
+
+
+
   cy = from_intr[1,2]
+
   def get_M(h=1.22):
     quadrangle = np.array([[0, cy + 20],
                            [size[1]-1, cy + 20],
                            [0, size[0]-1],
                            [size[1]-1, size[0]-1]], dtype=np.float32)
+    
     quadrangle_norm = np.hstack((normalize(quadrangle, intrinsics=from_intr), np.ones((4,1))))
+    
     quadrangle_world = np.column_stack((h*quadrangle_norm[:,0]/quadrangle_norm[:,1],
                                         h*np.ones(4),
                                         h/quadrangle_norm[:,1]))
+    
     rot = orient.rot_from_euler(augment_eulers)
+    
     to_extrinsics = np.hstack((rot.T, -augment_trans[:,None]))
+    
     to_KE = to_intr.dot(to_extrinsics)
+    
     warped_quadrangle_full = np.einsum('jk,ik->ij', to_KE, np.hstack((quadrangle_world, np.ones((4,1)))))
+    
     warped_quadrangle = np.column_stack((warped_quadrangle_full[:,0]/warped_quadrangle_full[:,2],
                                          warped_quadrangle_full[:,1]/warped_quadrangle_full[:,2])).astype(np.float32)
+    
     M = cv2.getPerspectiveTransform(quadrangle, warped_quadrangle.astype(np.float32))
     return M
 
   M = get_M()
+
+
+
+
+
+
+
+
+
   if pretransform is not None:
     M = M.dot(pretransform)
+  
+  
+  
   augmented_rgb = cv2.warpPerspective(base_img, M, output_size, borderMode=cv2.BORDER_REPLICATE)
 
   if top_hacks:
+
     cyy = int(math.ceil(to_intr[1,2]))
     M = get_M(1000)
+
     if pretransform is not None:
       M = M.dot(pretransform)
+
     augmented_rgb[:cyy] = cv2.warpPerspective(base_img, M, (output_size[0], cyy), borderMode=cv2.BORDER_REPLICATE)
 
   # brightness and contrast augment
@@ -216,6 +325,16 @@ def transform_img(base_img,
     augmented_img = augmented_rgb
 
   return augmented_img
+
+
+
+
+
+
+
+
+
+
 
 def yuv_crop(frame, output_size, center=None):
   # output_size in camera coordinates so u, v

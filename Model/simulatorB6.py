@@ -31,7 +31,7 @@ from tensorflow.keras.models import load_model
 
 from common.transformations.model import medmodel_intrinsics
 from lanes_image_space import transform_points
-from cameraB3 import transform_img, eon_intrinsics
+from cameraB3 import transform_img, eon_intrinsics, warp_img
 from parserB6 import parser
 from modelB6 import get_model
 # camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--32/video.hevc'
@@ -47,10 +47,10 @@ camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--33/video.hevc'
 
 
 
-supercombo = get_model()
-supercombo.load_weights(f'ckpt/modelB6-{700}.h5')  # for retraining
+# supercombo = get_model()
+# supercombo.load_weights(f'ckpt/modelB6-{700}.h5')  # for retraining
 
-# supercombo = load_model('saved_model/supercombo079.keras', compile=False)
+supercombo = load_model('saved_model/supercombo079.keras', compile=False)
 
 
 
@@ -139,14 +139,21 @@ if not ret:
    exit()
 else:
   frame_no = 1
+
+  
   bYUV = cv2.cvtColor(previous_frame, cv2.COLOR_BGR2YUV_I420)   # from big BGR to big YUV
   sYUVs[0] = transform_img(bYUV, from_intr=eon_intrinsics, to_intr=medmodel_intrinsics, yuv=True,
                            output_size=(512, 256))   # resize bYUVs to small YUVs
+
+
     #--- sYUVs.shape = (2, 384, 512)
 
 
 fig = plt.figure('OPNet Simulator')
 
+
+
+ 
 
 #while True:
 # for i in range(3):
@@ -156,13 +163,12 @@ for i in range(1200):
   frame_no += 1
 
   frame = current_frame.copy()
-  bYUV = cv2.cvtColor(current_frame, cv2.COLOR_BGR2YUV_I420) # shape: (1311, 1164).
-
  
+  sYUVs[1] = cv2.cvtColor(warp_img(frame), cv2.COLOR_BGR2YUV_I420)
 
-  sYUVs[1] = transform_img(bYUV, from_intr=eon_intrinsics, to_intr=medmodel_intrinsics, yuv=True,
-                           output_size=(512, 256))
-
+  # bYUV = cv2.cvtColor(current_frame, cv2.COLOR_BGR2YUV_I420) # shape: (1311, 1164).
+  # sYUVs[1] = transform_img(bYUV, from_intr=eon_intrinsics, to_intr=medmodel_intrinsics, yuv=True,
+  #                          output_size=(512, 256))
 
         # sYUVs = RGB_to_sYUVs(cap, frame_count)
         # CsYUVs = sYUVs_to_CsYUVs(sYUVs)
@@ -172,9 +178,12 @@ for i in range(1200):
   if frame_no > 1:
     print("#--- frame_no =", frame_no)
     CsYUVs = sYUVs_to_CsYUVs(sYUVs)
+    Xin0 = np.vstack(CsYUVs[0:2])[None]
     # print(f'## np.vstack(CsYUVs[0:2])[None].shape: {np.vstack(CsYUVs[0:2])[None].shape}')
-    
-    inputs = [np.vstack(CsYUVs[0:2])[None], desire, traffic_convection, state]
+    # Xin0 = normalize_img(Xin0)
+    # print(f'Xin0.shape: {Xin0.shape}, np.mean(Xin0): {np.mean(Xin0)}, np.std(Xin0): {np.std(Xin0)}')
+    # exit()
+    inputs = [Xin0, desire, traffic_convection, state]
 
     # outputs = supercombo(inputs)
     # outputs = [a.numpy() for a in outputs]
