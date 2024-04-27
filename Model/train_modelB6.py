@@ -20,7 +20,7 @@ from tqdm import tqdm
 import glob
 import pickle
 
-from data import RGB_to_YUV, Y_shape, plot_path
+from data import RGB_to_YUV, Y_shape, plot_outs
 
  
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
@@ -314,8 +314,8 @@ def validate(n=5):
         metric = tf.reduce_mean(maxae(Y, Y_pred))
 
         if(t % 10 == 0):
-            frame = RGBs[0] # (3, 128, 256)
-            plot_path(Y_pred, frame, dir_name=f'output/val', file_name=f'val-{i}.png')
+            frame = RGBs[0] # (3, 128, 256)            
+            plot_outs([y.numpy() for y in Y_pred], frame, dir_name=f'output/val', file_name=f'val-{i}.png')
  
         losses += loss.numpy().sum()
         metrics += metric.numpy().sum()

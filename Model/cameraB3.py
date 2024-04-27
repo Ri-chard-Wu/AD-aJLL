@@ -14,7 +14,7 @@ import math
 import numpy as np
 import common.transformations.orientation as orient
 import cv2
-from lanes_image_space import transform_points
+from lanes_image_space import transform_point
 
 FULL_FRAME_SIZE = (1164, 874)
 W, H = FULL_FRAME_SIZE[0], FULL_FRAME_SIZE[1]
@@ -225,12 +225,9 @@ def warp_img(img):
 
 def draw_path(img, path, x_lspace):
 
-    print(f'len(path): {len(path)}, len(x_lspace): {len(x_lspace)}')
-
-    new_xl_path, new_yl_path = transform_points(x_lspace, path-1)
-    new_xr_path, new_yr_path = transform_points(x_lspace, path+1)
-
-    
+ 
+    new_xl_path, new_yl_path = zip(*[transform_point(x_lspace[i], path[i]-1) for i in range(len(path))][4:])
+    new_xr_path, new_yr_path = zip(*[transform_point(x_lspace[i], path[i]+1) for i in range(len(path))][4:])
 
 
     fill_color=(128,0,255)

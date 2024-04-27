@@ -35,6 +35,9 @@ from cameraB3 import transform_img, eon_intrinsics, warp_img, draw_path
 from parserB6 import parser
 from modelB6 import get_model
 import glob
+
+from data import plot_outs
+
 # camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--32/video.hevc'
 camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--33/video.hevc'
 # camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--37/video.hevc'
@@ -225,145 +228,12 @@ for i in range(1200):
     plt.clf()   # clear figure
     plt.xlim(0, 1200)
     plt.ylim(800, 0)
-
-
-
-
-
-
-
-
-    # ------------------------------
-
-    plt.subplot(221)   # 221: 2 rows, 2 columns, 1st sub-figure
-    
-    
-
-
-    
-    # print(f"parsed['path_valid_len']: {parsed['path_valid_len']}")
-
-    l = int(parsed['path_valid_len'])
-    print(f'len(parsed["path"][0]): {len(parsed["path"][0])}, len(x_lspace): {len(x_lspace)}')
-    plt.imshow(draw_path(frame.copy(), parsed["path"][0][:l], x_lspace[:l]))
-
-    plt.title(f"path_valid_len: {l}")
-
-    # new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0]) 
-    # new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
-
-    # plt.plot(new_x_left, new_y_left, label='transformed', color='r')    
-    # plt.plot(new_x_right, new_y_right, label='transformed', color='b')
-
-
-
-
-
-
-  # ------------------------------
-
-
-
-
-
-
-
-    plt.subplot(222)
-    plt.gca().invert_yaxis()
-    plt.title("Camera View")
-    new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0])
-    new_x_path, new_y_path = transform_points(x_lspace, parsed["path"][0])
-    new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
-
-    plt.plot(new_x_left, new_y_left, label='transformed', color='r')
-    plt.plot(new_x_path, new_y_path, label='transformed', color='g')
-    plt.plot(new_x_right, new_y_right, label='transformed', color='b')
-
-    plt.legend(['left', 'path', 'right'])
-
-
-    # ------------------------------
-
-
-
-    plt.subplot(223)   # 221: 2 rows, 2 columns, 1st sub-figure
-    plt.title("Overlay Scene")
-    
-    plt.imshow(draw_path(frame.copy(), parsed["path"][0], x_lspace))
-
-    new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0]) 
-    new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
-
-    plt.plot(new_x_left, new_y_left, label='transformed', color='r')    
-    plt.plot(new_x_right, new_y_right, label='transformed', color='b')
-
-
-
-    # plt.subplot(223)
-    # plt.title("Original Scene")
-    # plt.imshow(frame)
-
-
-
-    # ------------------------------
-
-    plt.subplot(224)
-    plt.gca().invert_xaxis()
-      # Needed to invert axis because standard left lane is positive and right lane is negative, so we flip the x axis
-    plt.title("Top-Down View")
-    plt.plot(parsed["lll"][0], range(0, PATH_DISTANCE), "r-", linewidth=1)
-    plt.plot(parsed["path"][0], range(0, PATH_DISTANCE), "g-", linewidth=1)
-    plt.plot(parsed["rll"][0], range(0, PATH_DISTANCE), "b-", linewidth=1)
+ 
 
     if(i%5==0):
-        plt.savefig(f'output/sim/sim-{i}.png')
-        
+        plot_outs(outs, frame, f'output/sim', f'sim-{i}.png')
+ 
 
+  sYUVs[0] = sYUVs[1] 
 
-
-    # plt.show()
-    #   #plt.legend(['lll', 'rll', 'path'])
-    # plt.pause(0.001)
-    # input("Press ENTER to close ...")
-    # # if cv2.waitKey(1000) == 27:   # if ENTER is pressed
-    # cv2.destroyAllWindows()
-
-    # ''' plot parsed lines
-    # plot_label(frame_no, new_x_left, new_y_left, new_x_path, new_y_path, new_x_right, new_y_right)
-    # with open("y_true.json", "w") as f:  # use dump() to write parsed (numpy array object) into the json file f
-    #   json.dump(parsed, f, cls=NumpyEncoder) '''
-
-    # ''' plot large image for checking the vanishing point '''
-    # plt.clf()   # clear figure
-    # plt.xlim(0, 1164)
-    # plt.ylim(874, 0)
-    # plt.plot()
-    # plt.title("Original Scene")
-    # new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0])
-    # new_x_path, new_y_path = transform_points(x_lspace, parsed["path"][0])
-    # new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
-    # plt.plot(new_x_left, new_y_left, label='transformed', color='r')
-    # plt.plot(new_x_path, new_y_path, label='transformed', color='g')
-    # plt.plot(new_x_right, new_y_right, label='transformed', color='b')
-    # plt.imshow(frame)
-    # plt.pause(0.001)
-    # input("Press ENTER to close ...")
-    # # if cv2.waitKey(1000) == 27:   # if ENTER is pressed
-    # # cv2.destroyAllWindows()
-
-  sYUVs[0] = sYUVs[1]
-
-'''print('#--- parsed["path"][0]  =', parsed["path"][0])
-  print('#--- parsed["path"][0][:3]  =', parsed["path"][0][:3])
-  print('#--- parsed["path"][0][-3:] =', parsed["path"][0][-3:])
-  print('#--- new_x_path[:3]         =', new_x_path[:3])
-  print('#--- new_x_path[-3:]        =', new_x_path[-3:])
-  print('#--- new_y_path[:3]         =', new_y_path[:3])
-  print('#--- new_y_path[-3:]        =', new_y_path[-3:])'''
-print("#--- len(new_x_path) =", len(new_x_path))
-print("#--- len(outputs) =", len(outputs))
-
-input("Press ENTER to exit ...")
-if cv2.waitKey(1000) == 27:   # if ENTER is pressed
-  cv2.destroyAllWindows()
-plt.close()
+ 
