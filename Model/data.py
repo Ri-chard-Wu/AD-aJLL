@@ -44,6 +44,10 @@ Y_shape = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
  
 def plot_outs(outs, frame, dir_name, file_name):
 
+    frame = frame.astype(np.uint8)
+
+    # print(f'np.mean(frame): {np.mean(frame)}')
+    # exit()
     if(not os.path.exists(dir_name)):
         os.mkdir(dir_name)
 

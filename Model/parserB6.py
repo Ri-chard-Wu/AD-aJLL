@@ -40,20 +40,20 @@ def parser(outs):
     ''' from fill_path() in driving079.cc '''
   out_dict = {}
   if path is not None:
-    out_dict['path'] = path[:, :PATH_DISTANCE] + 0.1
+    out_dict['path'] = path[:, :PATH_DISTANCE] #+ 0.1
     out_dict['path_stds'] = softplus(path[:, PATH_DISTANCE:PATH_DISTANCE*2])
     out_dict['path_valid_len'] = np.fmin(PATH_DISTANCE, np.fmax(5, path[:, PATH_DISTANCE*2]))
       #--- out_dict['path_valid_len'] = 37.5976448059082
       #print("#--- out_dict['path_valid_len'] =", out_dict['path_valid_len'])
 
   if ll is not None:
-    out_dict['lll'] = ll[:, :PATH_DISTANCE] + LANE_OFFSET + 0.1
+    out_dict['lll'] = ll[:, :PATH_DISTANCE] + LANE_OFFSET #+ 0.1
     out_dict['lll_stds'] = softplus(ll[:, PATH_DISTANCE:PATH_DISTANCE*2])
     out_dict['lll_valid_len'] = np.fmin(PATH_DISTANCE, np.fmax(5, ll[:, PATH_DISTANCE*2]))
     out_dict['lll_prob'] = sigmoid(ll[:, PATH_DISTANCE*2 + 1])
 
   if rl is not None:
-    out_dict['rll'] = rl[:, :PATH_DISTANCE] - LANE_OFFSET - 0.1
+    out_dict['rll'] = rl[:, :PATH_DISTANCE] - LANE_OFFSET #- 0.1
     out_dict['rll_stds'] = softplus(rl[:, PATH_DISTANCE:-2])
     out_dict['rll_valid_len'] = np.fmin(PATH_DISTANCE, np.fmax(5, rl[:, -2]))
     out_dict['rll_prob'] = sigmoid(rl[:, -1])
@@ -69,9 +69,10 @@ def parser(outs):
   lead_reshaped = lead[:, :-3].reshape((-1, 5, 11))   # lead.shape = (1, 58) # lead_reshaped.shape = (1, 5, 11)
     
     
-  lead_weights = softmax(lead_reshaped[:, :, 8])
-    #--- lead_weights.shape = (1, 5)
+  lead_weights = softmax(lead_reshaped[:, :, 8]) # lead_weights.shape = (1, 5)
+  
   lidx = np.argmax(lead_weights[0])   #--- lidx = 4 or 2
+
     #--- lead_weights[0] = [0.1692249  0.05831928 0.29429242 0.14750355 0.33065984]
     #print("#--- lead_weights[0] =", lead_weights[0])
   out_dict['lead_xyva'] = np.column_stack([lead_reshaped[:, lidx, 0] * LEAD_X_SCALE,
@@ -94,6 +95,7 @@ def parser(outs):
                                                   softplus(lead_reshaped[:, lidx, 5]) * LEAD_Y_SCALE,
                                                   softplus(lead_reshaped[:, lidx, 6]) * LEAD_V_SCALE,
                                                   softplus(lead_reshaped[:, lidx, 7])])
+                                                  
   out_dict['lead_prob_2s'] = sigmoid(lead[:, -2])
   out_dict['lead_all'] = lead
 
