@@ -263,7 +263,8 @@ for i in range(1200):
     # new_x_path, new_y_path = transform_points(x_lspace, parsed["path"][0])
 
 
-  
+    
+    print(f"parsed['path_valid_len']: {parsed['path_valid_len']}")
     plt.imshow(draw_path(frame.copy(), parsed["path"][0]))
 
     # new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
