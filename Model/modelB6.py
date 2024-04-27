@@ -388,16 +388,21 @@ def get_model():
   out0, out1, out2, out3, out4, out5, out6, out7 = fork1(out11)
   out8, out9 = fork2(x_to_RNNfk2fk3)
   out10      = fork3(x_to_RNNfk2fk3)
-  outs = layers.Concatenate(axis=-1)([out0, out1, out2, out3, out4, out5, 
-                                      out6, out7, out8, out9, out10, out11])
+
+  # outs = layers.Concatenate(axis=-1)([out0, out1, out2, out3, out4, out5, 
+  #                                     out6, out7, out8, out9, out10, out11])
+
+  outs = [out0, out1, out2, out3, out4, out5, out6, out7, out8, out9, out10, out11]
 
     # Define the model
   model = keras.Model(inputs=inputs, outputs=outs, name='modelB6')
    
 
   Y = model([tf.random.uniform([3, *shape]) for shape in input_shapes])
-  
-  print(f'## Init pass. Y.shape: {Y.shape}')
+    
+  print(f'## Init pass. Y shape: {[y.shape for y in Y]}')
+  print(f'type(Y): {type(Y)}')
+
   # exit()
   return model
 
@@ -409,6 +414,6 @@ if __name__=="__main__":
 
   model = get_model()
 
-  model.summary()
+  # model.summary()
   #model.save('./saved_model/modelB6.h5')
   #print('#--- x0.shape =', x0.shape)
