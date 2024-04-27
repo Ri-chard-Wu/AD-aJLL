@@ -31,9 +31,10 @@ from tensorflow.keras.models import load_model
 
 from common.transformations.model import medmodel_intrinsics
 from lanes_image_space import transform_points
-from cameraB3 import transform_img, eon_intrinsics, warp_img
+from cameraB3 import transform_img, eon_intrinsics, warp_img, draw_path
 from parserB6 import parser
 from modelB6 import get_model
+import glob
 # camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--32/video.hevc'
 camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--33/video.hevc'
 # camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--37/video.hevc'
@@ -44,7 +45,8 @@ camerafile = '/home/richard/dataB6/UHD--2018-08-02--08-34-47--33/video.hevc'
 #print(supercombo.summary())
 
 
-
+all_videos = glob.glob("/home/richard/Downloads/TData1/*.hevc")
+camerafile = all_videos[20]
 
 
 # supercombo = get_model()
@@ -161,34 +163,10 @@ fig = plt.figure('OPNet Simulator')
 
 
 
-def draw_path(img, path):
-
-    new_xl_path, new_yl_path = transform_points(x_lspace, path-1)
-    new_xr_path, new_yr_path = transform_points(x_lspace, path+1)
-
-
-    fill_color=(128,0,255)
-    line_color=(0,255,0)
-    for i in range(1, len(new_xl_path)):
-
-        # u1,v1,u2,v2 = np.append(img_pts_l[i-1], img_pts_r[i-1])
-        # u3,v3,u4,v4 = np.append(img_pts_l[i], img_pts_r[i])
-
-        u1,v1,u2,v2 = new_xl_path[i-1], new_yl_path[i-1], new_xr_path[i-1], new_yr_path[i-1]
-        u3,v3,u4,v4 = new_xl_path[i], new_yl_path[i], new_xr_path[i], new_yr_path[i]
-
-
-        pts = np.array([[u1,v1],[u2,v2],[u4,v4],[u3,v3]], np.int32).reshape((-1,1,2))
-
-        if fill_color:
-            cv2.fillPoly(img,[pts],fill_color)
-
-        if line_color:
-            cv2.polylines(img,[pts],True,line_color)
-
-    return img
 
  
+
+
 
 #while True:
 # for i in range(3):
@@ -258,23 +236,24 @@ for i in range(1200):
     # ------------------------------
 
     plt.subplot(221)   # 221: 2 rows, 2 columns, 1st sub-figure
-    plt.title("Overlay Scene")
-    # new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0])
-    # new_x_path, new_y_path = transform_points(x_lspace, parsed["path"][0])
+    
+    
 
 
     
-    print(f"parsed['path_valid_len']: {parsed['path_valid_len']}")
-    plt.imshow(draw_path(frame.copy(), parsed["path"][0]))
+    # print(f"parsed['path_valid_len']: {parsed['path_valid_len']}")
 
+    l = int(parsed['path_valid_len'])
+    print(f'len(parsed["path"][0]): {len(parsed["path"][0])}, len(x_lspace): {len(x_lspace)}')
+    plt.imshow(draw_path(frame.copy(), parsed["path"][0][:l], x_lspace[:l]))
+
+    plt.title(f"path_valid_len: {l}")
+
+    # new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0]) 
     # new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
 
-    # plt.plot(new_x_left, new_y_left, label='transformed', color='r')
-    # plt.plot(new_x_path, new_y_path, label='transformed', color='g')
+    # plt.plot(new_x_left, new_y_left, label='transformed', color='r')    
     # plt.plot(new_x_right, new_y_right, label='transformed', color='b')
-
-    # plt.imshow(frame)   # Merge raw image and plot together
-
 
 
 
@@ -302,9 +281,31 @@ for i in range(1200):
 
     plt.legend(['left', 'path', 'right'])
 
-    plt.subplot(223)
-    plt.title("Original Scene")
-    plt.imshow(frame)
+
+    # ------------------------------
+
+
+
+    plt.subplot(223)   # 221: 2 rows, 2 columns, 1st sub-figure
+    plt.title("Overlay Scene")
+    
+    plt.imshow(draw_path(frame.copy(), parsed["path"][0], x_lspace))
+
+    new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0]) 
+    new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
+
+    plt.plot(new_x_left, new_y_left, label='transformed', color='r')    
+    plt.plot(new_x_right, new_y_right, label='transformed', color='b')
+
+
+
+    # plt.subplot(223)
+    # plt.title("Original Scene")
+    # plt.imshow(frame)
+
+
+
+    # ------------------------------
 
     plt.subplot(224)
     plt.gca().invert_xaxis()
@@ -316,7 +317,10 @@ for i in range(1200):
 
     if(i%5==0):
         plt.savefig(f'output/sim/sim-{i}.png')
-        print('saved img')
+        
+
+
+
     # plt.show()
     #   #plt.legend(['lll', 'rll', 'path'])
     # plt.pause(0.001)

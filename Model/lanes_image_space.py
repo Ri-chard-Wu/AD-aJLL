@@ -51,7 +51,7 @@ def transform_points(x, y):
   new_y = []
   # i = 0
   # while i < PATH_DISTANCE:
-  for i in range(PATH_DISTANCE):
+  for i in range(len(x)):
     xi = x[i]
     yi = y[i]
     p_car_space = np.array([xi, yi, 0., 1.])

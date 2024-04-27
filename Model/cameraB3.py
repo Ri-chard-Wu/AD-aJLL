@@ -14,7 +14,7 @@ import math
 import numpy as np
 import common.transformations.orientation as orient
 import cv2
-
+from lanes_image_space import transform_points
 
 FULL_FRAME_SIZE = (1164, 874)
 W, H = FULL_FRAME_SIZE[0], FULL_FRAME_SIZE[1]
@@ -133,6 +133,7 @@ def img_from_device(pt_device):
   pt_img = pt_view/pt_view[:,2:3]
   return pt_img.reshape(input_shape)[:,:2]
 
+
 def get_camera_frame_from_calib_frame(camera_frame_from_road_frame):
   camera_frame_from_ground = camera_frame_from_road_frame[:, (0, 1, 3)]
   calib_frame_from_ground = np.dot(eon_intrinsics,
@@ -216,6 +217,42 @@ def warp_img(img):
  
 
   return cv2.warpPerspective(src=img, M=warp_matrix, dsize=(512,256), flags=cv2.WARP_INVERSE_MAP)
+
+
+
+
+
+
+def draw_path(img, path, x_lspace):
+
+    print(f'len(path): {len(path)}, len(x_lspace): {len(x_lspace)}')
+
+    new_xl_path, new_yl_path = transform_points(x_lspace, path-1)
+    new_xr_path, new_yr_path = transform_points(x_lspace, path+1)
+
+    
+
+
+    fill_color=(128,0,255)
+    line_color=(0,255,0)
+    for i in range(1, len(new_xl_path)):
+
+        # u1,v1,u2,v2 = np.append(img_pts_l[i-1], img_pts_r[i-1])
+        # u3,v3,u4,v4 = np.append(img_pts_l[i], img_pts_r[i])
+
+        u1,v1,u2,v2 = new_xl_path[i-1], new_yl_path[i-1], new_xr_path[i-1], new_yr_path[i-1]
+        u3,v3,u4,v4 = new_xl_path[i], new_yl_path[i], new_xr_path[i], new_yr_path[i]
+
+
+        pts = np.array([[u1,v1],[u2,v2],[u4,v4],[u3,v3]], np.int32).reshape((-1,1,2))
+
+        if fill_color:
+            cv2.fillPoly(img,[pts],fill_color)
+
+        if line_color:
+            cv2.polylines(img,[pts],True,line_color)
+
+    return img
 
 
 
