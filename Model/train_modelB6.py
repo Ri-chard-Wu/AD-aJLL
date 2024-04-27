@@ -55,16 +55,16 @@ para = AttrDict(
     'grad_norm_clip': 1,
     'lr_min': 1e-4,
 
-    'accum_steps': 16,
+    'accum_steps': 8,
     'batch_size': 32,
-    'file_batch_size': 2,
+    'file_batch_size': 16,
 
     'weight_decay': 0.004, # 0.05
     'ema_momentum': 0.99, #0.99,
 
     'log_interval': 1,
-    'save_interval': 25,
-    'validate_interval': 1,
+    'save_interval': 100,
+    'validate_interval': 100,
 
     # 'ckpt_load_path': f'ckpt/modelB6-{2100}.h5',
   }
@@ -108,6 +108,8 @@ def get_frames(hevc_file):
     while ret:        
         frames.append(frame)
         ret, frame = cap.read()  
+
+    cap.release()
     return frames
 
 
@@ -118,16 +120,26 @@ def sample_data(file_batch, num_sample, debug=False):
 
     N = num_sample * len(file_batch)
 
-    X  = [np.zeros((N, 12, 128, 256)), np.zeros((N, 8)), np.zeros((N, 2)), np.zeros((N, 512))]
-    if (debug): RGBs = np.zeros((N, 874, 1164, 3)) # for debug.
+    X  = [np.zeros((N, 12, 128, 256), dtype=np.uint8), np.zeros((N, 8), dtype=np.float32), 
+                                        np.zeros((N, 2), dtype=np.float32), 
+                                        np.zeros((N, 512), dtype=np.float32)]
+    if (debug): 
+        RGBs = np.zeros((N, 874, 1164, 3), dtype=np.uint8) # for debug.
+        # print(f'RGBs.dtype: {RGBs.dtype}')
     else: RGBs = None
     Y = [np.zeros((N, s)) for s in Y_shape]
 
+    # print(f'X[0].dtype: {X[0].dtype}')
+ 
+        
+    progress_bar = tqdm(total=len(file_batch), desc="sample_data")
 
+  
     for fidx, (pkl_file, hevc_file) in enumerate(file_batch):
         
-        print(f'fidx: {fidx}')
-        
+        progress_bar.update(1)
+
+      
         frames = get_frames(hevc_file)
         
         idxes = np.random.choice(np.arange(len(frames)-1), size=num_sample, replace=False)   
@@ -158,13 +170,15 @@ def sample_data(file_batch, num_sample, debug=False):
 
     idxes = np.random.choice(np.arange(N), size=N, replace=False)   
 
-    X[0] = tf.convert_to_tensor(X[0][idxes], dtype=tf.float32)
-    X[3] = tf.convert_to_tensor(X[3][idxes], dtype=tf.float32)
+    # X[0] = X[0][idxes]
+    # X[3] = X[3][idxes]
+    X = [x[idxes] for x in X]
+    Y = [y[idxes] for y in Y]
     if (debug): RGBs = RGBs[idxes]
-    for i in range(12):
-        Y[i] = tf.convert_to_tensor(Y[i][idxes], dtype=tf.float32)
+    # for i in range(12):
+    #     Y[i] = tf.convert_to_tensor(Y[i][idxes], dtype=tf.float32)
 
-    X = [tf.convert_to_tensor(x, dtype=tf.float32) for x in X]
+    # X = [tf.convert_to_tensor(x, dtype=tf.float32) for x in X]
 
     return  X, Y, RGBs
 
@@ -208,11 +222,12 @@ def get_data(pkl_files, file_batch_size, batch_size, debug=False, num_sample = 3
 
                 X_batch = []
                 for i in range(4):
-                    X_batch.append(X[i][b*B:(b+1)*B])
+                    X_batch.append(tf.convert_to_tensor(X[i][b*B:(b+1)*B], dtype=tf.float32))
                 
+           
                 Y_batch = []
                 for i in range(12):
-                    Y_batch.append(Y[i][b*B:(b+1)*B])
+                    Y_batch.append(tf.convert_to_tensor(Y[i][b*B:(b+1)*B], dtype=tf.float32))
                 # Y_batch = np.hstack(Y_batch)
 
 
@@ -282,38 +297,6 @@ def parse_outs(y):
     return path, path_stds, path_valid_len, lll, lll_stds, lll_valid_len, lll_prob, \
         rll, rll_stds, rll_valid_len, rll_prob, lead_xyva, lead_xyva_std, *y[4:]
 
- 
-
-def train_loss_fn(y_true, y_pred):
-    
-
-    # # print(f'len(y_true): {len(y_true)}, type(y_true): {type(y_true)}')
-    # # print(f'len(y_pred): {len(y_pred)}, type(y_pred): {type(y_pred)}')
-
-    # y_true = parse_outs(y_true)
-    # y_pred = parse_outs(y_pred)
-
-    # # for i in tf.range(x):  # Use tf.range() for TensorFlow's tensors
-    # #     sum_value += tf.cast(i, tf.float32)
-
-    # means = [tf.math.reduce_mean(y) for y in y_true]
-    # stds = [tf.math.reduce_std(y) for y in y_true]
-
-
-    # y_true = [(y_true[i] - means[i]) / stds[i] for i in range(len(y_true))]
-    # y_pred = [(y_pred[i] - means[i]) / stds[i] for i in range(len(y_true))]
-  
-    # total_loss = 0
-    # for i in range(len(y_true)): 
-    #     total_loss += tf.keras.losses.mse(y_true[i], y_pred[i]) # (b,)
-    #     # total_loss += tf.clip_by_value(loss, 0, 1) 
-
-    # print(f'y_true.shape: {y_true.shape}, y_pred.shape: {y_pred.shape}')
-    total_loss = tf.keras.losses.mse(y_true, y_pred)
-  
-    return tf.math.reduce_mean(total_loss)
-
-
 
 
 
@@ -340,7 +323,7 @@ def validate(n=20):
 
         for j in range(len(RGBs)):
             frame = RGBs[j] # (874, 1164, 3)            
-            # plot_outs([y.numpy()[j:j+1] for y in Y_pred], frame, dir_name=f'output/val', file_name=f'pred-{i}-{j}.png')
+            plot_outs([y.numpy()[j:j+1] for y in Y_pred], frame, dir_name=f'output/val', file_name=f'pred-{i}-{j}.png')
             plot_outs([y.numpy()[j:j+1] for y in Y], frame, dir_name=f'output/val', file_name=f'true-{i}-{j}.png')
  
         losses += loss.numpy().sum()
@@ -377,6 +360,41 @@ def lr_scheduler(step):
 
     return np.asarray(lr, dtype=np.float32) 
 
+
+
+
+
+
+ 
+
+def train_loss_fn(y_true, y_pred):
+    
+
+    # # print(f'len(y_true): {len(y_true)}, type(y_true): {type(y_true)}')
+    # # print(f'len(y_pred): {len(y_pred)}, type(y_pred): {type(y_pred)}')
+
+    # y_true = parse_outs(y_true)
+    # y_pred = parse_outs(y_pred)
+
+    # # for i in tf.range(x):  # Use tf.range() for TensorFlow's tensors
+    # #     sum_value += tf.cast(i, tf.float32)
+
+    # means = [tf.math.reduce_mean(y) for y in y_true]
+    # stds = [tf.math.reduce_std(y) for y in y_true]
+
+
+    # y_true = [(y_true[i] - means[i]) / stds[i] for i in range(len(y_true))]
+    # y_pred = [(y_pred[i] - means[i]) / stds[i] for i in range(len(y_true))]
+  
+    # total_loss = 0
+    # for i in range(len(y_true)): 
+    #     total_loss += tf.keras.losses.mse(y_true[i], y_pred[i]) # (b,)
+    #     # total_loss += tf.clip_by_value(loss, 0, 1) 
+
+    # print(f'y_true.shape: {y_true.shape}, y_pred.shape: {y_pred.shape}')
+    total_loss = tf.keras.losses.mse(y_true, y_pred)
+  
+    return tf.math.reduce_mean(total_loss)
 
 
 
@@ -445,60 +463,58 @@ for epoch in range(10000):
 
     for i, batch in enumerate(train_dataset): # have ~600 training batches.
 
-        # X, Y, _ = batch                    
+        X, Y, _ = batch                    
 
-        # total_loss = 0.0
-        # total_metric = 0.0
-
-        # accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
-        # step_size = para.batch_size // para.accum_steps
+        total_loss = 0.0
+        total_metric = 0.0
+ 
+        accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
+        step_size = para.batch_size // para.accum_steps
         
-        # for step in range(para.accum_steps): 
-
-        #     print(f'step: {step}')
-          
-        #     # print(f"## (len(tf.config.experimental.list_physical_devices('GPU'))): {(len(tf.config.experimental.list_physical_devices('GPU')))}")
-        #     X_step = [a[step*step_size:(step+1)*step_size] for a in X]
-        #     Y_step = [a[step*step_size:(step+1)*step_size] for a in Y]
-        #     # Y_step = Y[step*step_size:(step+1)*step_size]
+  
+        for step in range(para.accum_steps): 
+ 
+            # print(f"## (len(tf.config.experimental.list_physical_devices('GPU'))): {(len(tf.config.experimental.list_physical_devices('GPU')))}")
+            X_step = [a[step*step_size:(step+1)*step_size] for a in X]
+            Y_step = [a[step*step_size:(step+1)*step_size] for a in Y]
+            # Y_step = Y[step*step_size:(step+1)*step_size]
             
          
  
-        #     loss, metric, grad = _train_step(X_step, Y_step)
-
-            
+            loss, metric, grad = _train_step(X_step, Y_step)
  
-        #     for i in range(len(accum_gradients)):
+ 
+            for i in range(len(accum_gradients)):
                  
-        #         accum_gradients[i] += grad[i]
+                accum_gradients[i] += grad[i]
             
 
-        #     # print(f'## a, loss: {loss}')
-        #     total_loss += loss.numpy() 
+            # print(f'## a, loss: {loss}')
+            total_loss += loss.numpy() 
 
-        #     # print(f'## b, metric: {metric}')
+            # print(f'## b, metric: {metric}')
 
-        #     total_metric += metric.numpy() 
+            total_metric += metric.numpy() 
 
-        #     # print(f'## c')
+            # print(f'## c')
 
  
-        # averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
-        # # clipped_grads, _ = tf.clip_by_global_norm(averaged_gradients, para.grad_norm_clip)
-        # optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+        averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
+        # clipped_grads, _ = tf.clip_by_global_norm(averaged_gradients, para.grad_norm_clip)
+        optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
 
      
-        # update_counts += 1
-        # lr_next = lr_scheduler(update_counts)
-        # tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
+        update_counts += 1
+        lr_next = lr_scheduler(update_counts)
+        tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
 
 
 
-        # if update_counts % para.log_interval == 0:
-        #     log = f'[{update_counts}] train loss: {total_loss / para.accum_steps}' + \
-        #                   f', train metric: {total_metric / para.accum_steps}' + f', lr: {lr_next}' 
-        #     print(log)
-        #     with open("log.txt", "a") as f: f.write(log + '\n')
+        if update_counts % para.log_interval == 0:
+            log = f'[{update_counts}] train loss: {total_loss / para.accum_steps}' + \
+                          f', train metric: {total_metric / para.accum_steps}' + f', lr: {lr_next}' 
+            print(log)
+            with open("log.txt", "a") as f: f.write(log + '\n')
 
         
 
