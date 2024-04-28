@@ -221,6 +221,8 @@ def top(x0):
     #--- x.shape = (None, 4, 8, 1408)
   return x
 
+
+
 def RNN(x, desire, traffic_convection, rnn_state):
   desire1 = layers.Dense(use_bias=False, units=8)(desire)
   traffic_convection1 = layers.Dense(use_bias=False, units = 2)(traffic_convection)
@@ -252,6 +254,8 @@ def RNN(x, desire, traffic_convection, rnn_state):
   multiply_1 = snpe_pleaser*activation_1
   out11 = layers.add([multiply_1 , multiply_2])
   return out11
+
+
 
 def fork1(x):
   xp = layers.Dense(256, activation='relu', name="1_path")(x)

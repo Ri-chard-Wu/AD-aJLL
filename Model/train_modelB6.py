@@ -59,13 +59,15 @@ para = AttrDict(
     'batch_size': 16,
     'horizon': 128,
     'horizon_val': 256,
+    
 
-    'weight_decay': 0.004, # 0.05
+    'weight_decay': 0.05, # 0.05, 0.004
     'ema_momentum': 0.99, #0.99,
 
     'log_interval': 1,
     'save_interval': 10,
     'validate_interval': 10,
+    'update_interval': 20,
 
     'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
   }
@@ -247,17 +249,20 @@ def validate(n=3):
 
 
             if(t%5==0):
+              frame = RGBs[0, t]
 
-              try:
-                                  
-                  frame = RGBs[0, t]
-                  plot_outs([y.numpy() for y in Y_pred_batch], frame, dir_name=f'output/val/{i}', file_name=f'pred-{t}.png')
-                  plot_outs([y.numpy() for y in Y_batch], frame, dir_name=f'output/val/{i}', file_name=f'true-{t}.png')
-      
+              try:                                                                      
+                  plot_outs([y.numpy() for y in Y_batch], frame, dir_name=f'output/val/{i}', file_name=f'true-{t}.png')      
               except:
                   print(f'[Warning] plot outs failed.')
                   return
 
+
+              try:
+                  plot_outs([y.numpy() for y in Y_pred_batch], frame, dir_name=f'output/val/{i}', file_name=f'pred-{t}.png')                
+              except:
+                  print(f'[Warning] plot outs failed.')
+                  return
 
 
             Y_pred_batch = tf.concat(Y_pred_batch, axis=-1)
@@ -267,6 +272,7 @@ def validate(n=3):
             # rnn_st_batch = tf.convert_to_tensor(Y_pred_batch[STATE_IDX:].numpy(), dtype=tf.float32)
 
             rnn_st_batch = Y_pred_batch[:, STATE_IDX:]
+            rnn_st_batch = tf.clip_by_value(rnn_st_batch, -1000, 1000)     
  
             loss = train_loss_fn(Y_batch, Y_pred_batch)
             metric = tf.reduce_mean(maxae(Y_batch[:, :STATE_IDX], Y_pred_batch[:, :STATE_IDX]))
@@ -318,7 +324,7 @@ LEAD_X_SCALE = 10   # x_scale in driving.cc
 LEAD_Y_SCALE = 10   # y_scale in driving.cc
 LEAD_V_SCALE = 1
 
-
+TIME_DISTANCE = 100
  
 PATH_IDX   = 0      # o0:  192*2+1 = 385
 LL_IDX     = 385    # o1:  192*2+2 = 386
@@ -334,6 +340,11 @@ POSE_IDX   = 1859   # o10: 12
 STATE_IDX  = 1871   # o11: 512
 OUTPUT_IDX = 2383
  
+
+ 
+ 
+
+
 
 
 def standardize(y_true, y_pred):
@@ -366,11 +377,29 @@ def path_loss_fn(path_true, path_pred):
         loss = tf.keras.losses.mse(y_true, y_pred)
         return tf.math.reduce_mean(loss)
 
+    def loss_within_valid_len(p_true, p_pred, l): 
+        p_true = p_true[:l] # 1D vector.
+        p_pred = p_pred[:l] # 1D vector.
+        p_true, p_pred = standardize(p_true, p_pred)        
+        loss = tf.keras.losses.mse(p_true, p_pred)
+        return loss  # a scalar.
+
+
     path_true, path_std_true, path_valid_len_true = parse(path_true)
     path_pred, path_std_pred, path_valid_len_pred = parse(path_pred)
-   
-    return loss_fn(path_true, path_pred) + loss_fn(path_std_true, path_std_pred) + \
-                                    loss_fn(path_valid_len_true, path_valid_len_pred)
+
+
+    L = tf.cast(path_valid_len_true, dtype=tf.int32)
+ 
+    
+    loss_path = tf.map_fn(lambda x: loss_within_valid_len(x[0], x[1], x[2]), (path_true, path_pred, L), dtype=tf.float32) # (b,)
+    loss_std = tf.map_fn(lambda x: loss_within_valid_len(x[0], x[1], x[2]), (path_std_true, path_std_pred, L), dtype=tf.float32) # (b,)
+
+
+    return tf.reduce_mean(loss_path), tf.reduce_mean(loss_std), loss_fn(path_valid_len_true, path_valid_len_pred)
+
+    # return loss_fn(path_true[:, :l], path_pred[:, :l]) + loss_fn(path_std_true[:, :l], path_std_pred[:, :l]) + \
+    #                                 loss_fn(path_valid_len_true, path_valid_len_pred)
 
 
 
@@ -395,12 +424,28 @@ def lane_loss_fn(lane_true, lane_pred, sign):
         loss = tf.keras.losses.mse(y_true, y_pred)
         return tf.math.reduce_mean(loss)
 
+    def loss_within_valid_len(p_true, p_pred, l): 
+        p_true = p_true[:l] # 1D vector.
+        p_pred = p_pred[:l] # 1D vector.
+        p_true, p_pred = standardize(p_true, p_pred)        
+        loss = tf.keras.losses.mse(p_true, p_pred)
+        return loss # a scalar.
+
+
     lane_true, lane_std_true, lane_valid_len_true, lane_prob_true = parse(lane_true)
     lane_pred, lane_std_pred, lane_valid_len_pred, lane_prob_pred = parse(lane_pred)
     
-   
-    return loss_fn(lane_true, lane_pred) + loss_fn(lane_std_true, lane_std_pred) + \
-            loss_fn(lane_valid_len_true, lane_valid_len_pred) + loss_fn(lane_prob_true, lane_prob_pred)
+ 
+    L = tf.cast(lane_valid_len_true, dtype=tf.int32)
+
+
+    loss_lane = tf.map_fn(lambda x: loss_within_valid_len(x[0], x[1], x[2]), (lane_true, lane_pred, L), dtype=tf.float32) # (b,)
+    loss_std = tf.map_fn(lambda x: loss_within_valid_len(x[0], x[1], x[2]), (lane_std_true, lane_std_pred, L), dtype=tf.float32) # (b,)
+
+    return tf.reduce_mean(loss_lane) + tf.reduce_mean(loss_std) + loss_fn(lane_valid_len_true, lane_valid_len_pred) + loss_fn(lane_prob_true, lane_prob_pred)
+
+    # return loss_fn(lane_true[:, :l], lane_pred[:, :l]) + loss_fn(lane_std_true[:, :l], lane_std_pred[:, :l]) + \
+    #         loss_fn(lane_valid_len_true, lane_valid_len_pred) + loss_fn(lane_prob_true, lane_prob_pred)
 
  
 
@@ -452,6 +497,19 @@ def lead_loss_fn(lead_true, lead_pred):
  
 
 
+def longi_loss_fn(longi_true, longi_pred):
+   
+ 
+    loss = tf.math.square(longi_true - longi_pred)[:, :TIME_DISTANCE][:, ::10]
+
+    loss = tf.math.reduce_mean(loss, axis=-1)
+
+    return tf.math.reduce_mean(loss)
+
+ 
+
+
+
 
 def train_loss_fn(y_true, y_pred):
     
@@ -470,16 +528,39 @@ def train_loss_fn(y_true, y_pred):
     # o11 = outputs[:, STATE_IDX:  OUTPUT_IDX]
 
    
-    # path_loss = path_loss_fn(y_true[:, PATH_IDX:LL_IDX], y_pred[:, PATH_IDX:LL_IDX])
-    # ll_loss = lane_loss_fn(y_true[:, LL_IDX:RL_IDX], y_pred[:, LL_IDX:RL_IDX], +1)
-    # rl_loss = lane_loss_fn(y_true[:, RL_IDX:LEAD_IDX], y_pred[:, RL_IDX:LEAD_IDX], -1)
-    # lead_loss = lead_loss_fn(y_true[:, LEAD_IDX:LONG_X_IDX], y_pred[:, LEAD_IDX:LONG_X_IDX])
+    path_loss = path_loss_fn(y_true[:, PATH_IDX:LL_IDX], y_pred[:, PATH_IDX:LL_IDX])
+    ll_loss = lane_loss_fn(y_true[:, LL_IDX:RL_IDX], y_pred[:, LL_IDX:RL_IDX], +1)
+    rl_loss = lane_loss_fn(y_true[:, RL_IDX:LEAD_IDX], y_pred[:, RL_IDX:LEAD_IDX], -1)
+    lead_loss = lead_loss_fn(y_true[:, LEAD_IDX:LONG_X_IDX], y_pred[:, LEAD_IDX:LONG_X_IDX])
+ 
+    longi_x_loss = longi_loss_fn(y_true[:, LONG_X_IDX:LONG_V_IDX], y_pred[:, LONG_X_IDX:LONG_V_IDX])
+    longi_v_loss = longi_loss_fn(y_true[:, LONG_V_IDX:LONG_A_IDX], y_pred[:, LONG_V_IDX:LONG_A_IDX])
+    longi_a_loss = longi_loss_fn(y_true[:, LONG_A_IDX:DESIRE_IDX], y_pred[:, LONG_A_IDX:DESIRE_IDX])
 
-    # return path_loss + ll_loss + rl_loss + lead_loss
+    return path_loss + ll_loss + rl_loss + lead_loss + longi_x_loss + longi_v_loss + longi_a_loss
 
-    total_loss = tf.keras.losses.mse(y_true[:, :STATE_IDX], y_pred[:, :STATE_IDX])
+    # total_loss = tf.keras.losses.mse(y_true[:, :STATE_IDX], y_pred[:, :STATE_IDX])
     
-    return tf.math.reduce_mean(total_loss)
+    # return tf.math.reduce_mean(total_loss)
+
+
+
+
+
+
+
+# def train_loss_fn(y_true, y_pred):
+    
+#     # print(f'y_true.shape: {y_true.shape}')
+#     # print(f'y_pred.shape: {y_pred.shape}')
+#     # print(f'y_true[:, :STATE_IDX].shape: {y_true[:, :STATE_IDX].shape}')
+#     # print(f' y_pred[:, :STATE_IDX].shape: { y_pred[:, :STATE_IDX].shape}')    
+
+#     total_loss = tf.keras.losses.mse(y_true[:, :STATE_IDX], y_pred[:, :STATE_IDX])
+    
+#     # print(f'total_loss: {total_loss}')
+
+#     return tf.math.reduce_mean(total_loss)
 
 
 
@@ -505,6 +586,9 @@ def train_step(X_step, Y_step):
     grad = tape.gradient(loss, model.trainable_variables)
 
     
+    # print(f'Y_pred max: {np.max(Y_pred.numpy())}')
+    # print(f'Y_pred min: {np.min(Y_pred.numpy())}')
+
     metric = tf.reduce_mean(maxae(Y_step[:, :STATE_IDX], Y_pred[:, :STATE_IDX]))
    
     return loss, metric, grad, Y_pred[:, STATE_IDX:]
@@ -533,7 +617,11 @@ def train_batch(X_batch, Y_batch):
          
 
         rnn_st_batch[step*step_size:(step+1)*step_size] = rnn_st_step.numpy()
+        # print(f'rnn_st_step max: {np.max(rnn_st_step.numpy())}')
+        # print(f'rnn_st_step min: {np.min(rnn_st_step.numpy())}')
  
+
+
         for i in range(len(accum_gradients)):          
             accum_gradients[i] += grad[i]
           
@@ -544,9 +632,9 @@ def train_batch(X_batch, Y_batch):
 
     averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
     # clipped_grads, _ = tf.clip_by_global_norm(averaged_gradients, para.grad_norm_clip)
-    optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+    # optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
 
-    return np.mean(losses), np.mean(metrics), tf.convert_to_tensor(rnn_st_batch, dtype=tf.float32)
+    return np.mean(losses), np.mean(metrics), tf.convert_to_tensor(rnn_st_batch, dtype=tf.float32), averaged_gradients
         
 
 
@@ -600,6 +688,9 @@ for eidx, episodes in enumerate(train_episodes): # have ~600 training batches.
 
     progress_bar = tqdm(total=H, desc="executing training episodes...")
 
+
+    accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
+
     for t in range(H): 
 
         progress_bar.update(1)
@@ -609,8 +700,15 @@ for eidx, episodes in enumerate(train_episodes): # have ~600 training batches.
       
         X_batch = [X0_batch, X1_batch, X2_batch, rnn_st_batch]
  
-        loss, metric, rnn_st_batch = train_batch(X_batch, Y_batch)
+        loss, metric, rnn_st_batch, grad = train_batch(X_batch, Y_batch)
      
+        for i in range(len(accum_gradients)):          
+            accum_gradients[i] += grad[i]
+
+        # rnn_st_batch = tf.clip_by_value(rnn_st_batch, -1000, 1000)     
+        print(f'tf.math.reduce_max(rnn_st_batch): {tf.math.reduce_max(rnn_st_batch)}')
+        print(f'tf.math.reduce_min(rnn_st_batch): {tf.math.reduce_min(rnn_st_batch)}')
+
         losses.append(loss) 
         metrics.append(metric) 
 
@@ -618,6 +716,13 @@ for eidx, episodes in enumerate(train_episodes): # have ~600 training batches.
         lr_next = lr_scheduler(update_counts)
         tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
 
+        if(t%para.update_interval==0):
+
+            averaged_gradients = [accum_grad / tf.cast(para.update_interval, tf.float32) for accum_grad in accum_gradients]
+
+            optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+
+            accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
 
 
     if eidx % para.log_interval == 0:
