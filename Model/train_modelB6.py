@@ -45,31 +45,6 @@ class AttrDict(dict):
         return self[a]
 
  
-# para = AttrDict(
-#   {
-
-#     'total_steps': 1000,
-#     'base_lr': 1e-3,
-#     'decay_type': 'cosine',
-#     'warmup_steps': 5,
-#     'grad_norm_clip': 1,
-#     'lr_min': 1e-4,
-
-#     'accum_steps': 16,
-#     'batch_size': 32,
-#     'file_batch_size': 16,
-
-#     'weight_decay': 0.004, # 0.05
-#     'ema_momentum': 0.99, #0.99,
-
-#     'log_interval': 5,
-#     'save_interval': 100,
-#     'validate_interval': 100,
-
-#     'ckpt_load_path': f'ckpt/modelB6-{17200}.h5',
-#   }
-# ) 
-
 para = AttrDict(
   {
 
@@ -80,27 +55,54 @@ para = AttrDict(
     'grad_norm_clip': 1,
     'lr_min': 1e-4,
 
-    'accum_steps': 16,
-    'batch_size': 32,
-    'file_batch_size': 2,
+    'accum_steps': 8,
+    'batch_size': 16,
+    'horizon': 50,
+    'horizon_val': 256,
 
     'weight_decay': 0.004, # 0.05
     'ema_momentum': 0.99, #0.99,
 
-    'log_interval': 5,
-    'save_interval': 100,
-    'validate_interval': 100,
+    'log_interval': 1,
+    'save_interval': 1,
+    'validate_interval': 1,
 
     'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
   }
 ) 
+
+# para = AttrDict(
+#   {
+
+#     'total_steps': 1000,
+#     'base_lr': 1e-3,
+#     'decay_type': 'cosine',
+#     'warmup_steps': 5,
+#     'grad_norm_clip': 1,
+#     'lr_min': 1e-4,
+
+#     'accum_steps': 1,
+#     'batch_size': 2,
+#     'horizon': 50,
+#     'horizon_val': 1024,
+
+#     'weight_decay': 0.004, # 0.05
+#     'ema_momentum': 0.99, #0.99,
+
+#     'log_interval': 1,
+#     'save_interval': 1000,
+#     'validate_interval': 1,
+
+#     'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
+#   }
+# ) 
 
 
  
 
 
 
-def get_frames(hevc_file):
+def read_frames(hevc_file):
 
     frames = []
 
@@ -114,171 +116,160 @@ def get_frames(hevc_file):
 
     cap.release()
     return frames
-
-
  
 
-def sample_data(file_batch, num_sample, debug=False):
- 
 
-    N = num_sample * len(file_batch)
-
-    X  = [np.zeros((N, 12, 128, 256), dtype=np.uint8), np.zeros((N, 8), dtype=np.float32), 
-                                        np.zeros((N, 2), dtype=np.float32), 
-                                        np.zeros((N, 512), dtype=np.float32)]
-    if (debug): 
-        RGBs = np.zeros((N, 874, 1164, 3), dtype=np.uint8) # for debug.
-        # print(f'RGBs.dtype: {RGBs.dtype}')
-    else: RGBs = None
-    Y = [np.zeros((N, s)) for s in Y_shape]
-
-    # print(f'X[0].dtype: {X[0].dtype}')
- 
-        
-    progress_bar = tqdm(total=len(file_batch), desc="sample_data")
-
+def gen_episodes_train(pkl_files):
   
-    for fidx, (pkl_file, hevc_file) in enumerate(file_batch):
-        
-        progress_bar.update(1)
+    hevc_files = [pkl_file.replace('data.pkl', 'fcamera.hevc') for pkl_file in pkl_files]    
 
-      
-        frames = get_frames(hevc_file)
+    H = para.horizon 
+    B = para.batch_size
+    n_B = len(pkl_files) // B 
+         
+    while(1): 
+
+        for bidx in range(n_B):
+ 
+            if((bidx+1) * B > len(pkl_files)): break
+  
+            X0 = np.zeros((B, H, 12, 128, 256), dtype=np.uint8)            
+            Y = [np.zeros((B, H, s)) for s in Y_shape]
+ 
+            progress_bar = tqdm(total=B, desc="sample_data")
+             
+            for fidx in range(B):
+                
+                progress_bar.update(1)
+
+                pkl_file = pkl_files[bidx * B + fidx]
+                hevc_file = hevc_files[bidx * B + fidx]                
+ 
+                frames = read_frames(hevc_file) 
+                
+                idx = np.random.choice(np.arange(len(frames)-H), size=1)[0]
+                frames = frames[idx:idx+H+1]
+ 
+                with open(pkl_file, 'rb') as f:      
+
+                    data = pickle.load(f)    
+                    for i in range(12):
+                        assert data['Y'][i].shape[1] == Y_shape[i]
+ 
+                for t in range(H):   
         
-        idxes = np.random.choice(np.arange(len(frames)-1), size=num_sample, replace=False)   
-        # frames = [frames[i] for i in idxes]
-        
+                    X0[fidx, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
+
+                    for j in range(12):
+                        Y[j][fidx, t] = data['Y'][j][t]
+                                                
+            yield X0, Y
+
+
+
+
+def gen_episodes_val(pkl_files):
+  
+    hevc_files = [pkl_file.replace('data.pkl', 'fcamera.hevc') for pkl_file in pkl_files]    
+
+    H = para.horizon_val
+  
+    while(1):
+
+        idx = np.random.choice(np.arange(len(pkl_files)), size=1)[0]
+        pkl_file = pkl_files[idx]
+        hevc_file = hevc_files[idx]
+
+        RGBs = np.zeros((1, H, 874, 1164, 3), dtype=np.uint8) # for debug.
+        X0 = np.zeros((1, H, 12, 128, 256), dtype=np.uint8)            
+        Y = [np.zeros((1, H, s)) for s in Y_shape]
+     
+        frames = read_frames(hevc_file) 
+        idx = np.random.choice(np.arange(len(frames)-H), size=1)[0]
+        frames = frames[idx:idx+H+1]
+ 
         with open(pkl_file, 'rb') as f:      
 
-            data = pickle.load(f)   
-            assert data['Xin3'].shape[1] == 512
-       
+            data = pickle.load(f)    
             for i in range(12):
                 assert data['Y'][i].shape[1] == Y_shape[i]
 
- 
-        for i in range(num_sample):
-             
-            idx = idxes[i]  
+        for t in range(H):   
 
-            X[3][i + fidx*num_sample] = data['Xin3'][idx]
-            X[0][i + fidx*num_sample] = np.vstack((RGB_to_YUV(frames[idx]), RGB_to_YUV(frames[idx+1]))) # (12, 128, 256).
+            RGBs[0, t] = cv2.cvtColor(frames[t], cv2.COLOR_BGR2RGB)
+
+            X0[0, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
 
             for j in range(12):
-                Y[j][i + fidx*num_sample] = data['Y'][j][idx]
-         
-
-            if (debug): RGBs[i + fidx*num_sample] = cv2.cvtColor(frames[idx], cv2.COLOR_BGR2RGB)
+                Y[j][0, t] = data['Y'][j][t]
 
 
-    idxes = np.random.choice(np.arange(N), size=N, replace=False)   
+        yield X0, Y, RGBs
 
-    # X[0] = X[0][idxes]
-    # X[3] = X[3][idxes]
-    X = [x[idxes] for x in X]
-    Y = [y[idxes] for y in Y]
-    if (debug): RGBs = RGBs[idxes]
-    # for i in range(12):
-    #     Y[i] = tf.convert_to_tensor(Y[i][idxes], dtype=tf.float32)
+ 
 
-    # X = [tf.convert_to_tensor(x, dtype=tf.float32) for x in X]
 
-    return  X, Y, RGBs
-
+def validate(n=3):
         
-    
+    H = para.horizon_val
 
-
-def get_data(pkl_files, file_batch_size, batch_size, debug=False, num_sample = 50):
-
-    print(f'## n data: {len(pkl_files)}')   
-
-    hevc_files = [pkl_file.replace('data.pkl', 'fcamera.hevc') for pkl_file in pkl_files] 
-   
-    FB = file_batch_size
-    n_FB = len(pkl_files) // FB 
-    
-    B = batch_size
-    n_B = (num_sample * FB) // B 
-        
-    N = num_sample * FB
-
-    while(1): 
-
-        for fb in range(n_FB):
- 
-            if((fb+1) * FB > len(pkl_files)): break
- 
-            file_batch = [(pkl_files[i], hevc_files[i]) for i in range(fb * FB, (fb+1) * FB)]
-
-            
-            X, Y, RGBs = sample_data(file_batch, num_sample, debug)
-            
-
-
-            for b in range(n_B):
- 
-                if((b+1) * B > N): break
-  
-                # Ximg = np.concatenate([X[0][i][None] for i in range(b*B, (b+1)*B)])
-                # assert Ximg.shape == (B, 12, 128, 256)
-
-                X_batch = []
-                for i in range(4):
-                    X_batch.append(tf.convert_to_tensor(X[i][b*B:(b+1)*B], dtype=tf.float32))
-                
-           
-                Y_batch = []
-                for i in range(12):
-                    Y_batch.append(tf.convert_to_tensor(Y[i][b*B:(b+1)*B], dtype=tf.float32))
-                # Y_batch = np.hstack(Y_batch)
-
-
-                RGB_batch = RGBs[b*B:(b+1)*B] if debug else None
-                # print(f'## yield batch: {b} of file {file_idx}')
-                yield X_batch, Y_batch, RGB_batch
-
-
- 
-
-
-def validate(n=20):
-    
-    # print(f'## validating...') 
-  
     losses = 0
     metrics = 0
-    # count = 0
-    for i, batch in tqdm(enumerate(val_dataset)):
+    
+    for i, episode in tqdm(enumerate(val_episodes)):
+
         if i >= n: break
 
-        X, Y, RGBs = batch
-        # count += len(Y)
-
-        Y_pred = model(X, training=False) # a list.
-
-        Y_pred_cat = np.hstack(Y_pred)
-        Y_cat = np.hstack(Y)
-
-        loss = train_loss_fn(Y_cat, Y_pred_cat)
-        metric = tf.reduce_mean(maxae(Y_cat, Y_pred_cat))
-
-        for j in range(len(RGBs)):
-            frame = RGBs[j] # (874, 1164, 3)            
-            plot_outs([y.numpy()[j:j+1] for y in Y_pred], frame, dir_name=f'output/val', file_name=f'pred-{i}-{j}.png')
-            plot_outs([y.numpy()[j:j+1] for y in Y], frame, dir_name=f'output/val', file_name=f'true-{i}-{j}.png')
+        X0, Y, RGBs = episode
  
-        losses += loss.numpy().sum()
-        metrics += metric.numpy().sum()
 
-    # assert count == n * para.batch_size, f'{count} != {n * para.batch_size}'
+        X1_batch = tf.convert_to_tensor(np.zeros((1, 8)), dtype=tf.float32)
+        X2_batch = tf.convert_to_tensor(np.zeros((1, 2)), dtype=tf.float32)
+        rnn_st_batch = tf.convert_to_tensor(np.zeros((1, 512)), dtype=tf.float32)
 
-    losses = losses / n
-    metrics = metrics / n
+        progress_bar = tqdm(total=H, desc="executing val episodes...")
+          
+        losses = []
+        metrics = []
 
-    # print(f'val loss: {losses}, val metric: {metrics}, count: {count}')
+        for t in range(H):
+ 
+            progress_bar.update(1)
+      
+            X0_batch = tf.convert_to_tensor(X0[:, t, ...], dtype=tf.float32)
+            Y_batch = [tf.convert_to_tensor(y[:, t, ...], dtype=tf.float32) for y in Y]
+             
+           
+            X_batch = [X0_batch, X1_batch, X2_batch, rnn_st_batch]
 
-    return losses, metrics
+            Y_pred_batch = model(X_batch, training=False) # a list.
+
+
+            if(t%5==0):
+                frame = RGBs[0, t]
+                plot_outs([y.numpy() for y in Y_pred_batch], frame, dir_name=f'output/val/{i}', file_name=f'pred-{t}.png')
+                plot_outs([y.numpy() for y in Y_batch], frame, dir_name=f'output/val/{i}', file_name=f'true-{t}.png')
+    
+
+
+            Y_pred_batch = tf.concat(Y_pred_batch, axis=-1)
+            Y_batch = tf.concat(Y_batch, axis=-1)
+
+
+            # rnn_st_batch = tf.convert_to_tensor(Y_pred_batch[STATE_IDX:].numpy(), dtype=tf.float32)
+
+            rnn_st_batch = Y_pred_batch[:, STATE_IDX:]
+ 
+            loss = train_loss_fn(Y_batch[:, :STATE_IDX], Y_pred_batch[:, :STATE_IDX])
+            metric = tf.reduce_mean(maxae(Y_batch[:, :STATE_IDX], Y_pred_batch[:, :STATE_IDX]))
+
+          
+            losses.append(loss.numpy())
+            metrics.append(metric.numpy())
+      
+    return np.mean(losses), np.mean(metrics)
+
+
 
 
 
@@ -304,77 +295,14 @@ def lr_scheduler(step):
 
 
 
-
-
-
  
 
 def maxae(y_true, y_pred):
   # [for i in range(len(y_true))]
   return KB.max(KB.abs(y_pred - y_true), axis=-1)
 
+  
  
-
-def parse_outs(y):
-
-    # Y_shape = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
-
-    # p, ll, rl, lead, long_x, long_v, long_a, desire_state, meta, desire_pred, pose, state = y
-    
-    p, ll, rl, lead = y[:4]
-   
-
-    path = p[:, :PATH_DISTANCE] + 0.1
-    path_stds = tf.math.softplus(p[:, PATH_DISTANCE:PATH_DISTANCE*2])    
-    path_valid_len = tf.clip_by_value(p[:, PATH_DISTANCE*2], 5, PATH_DISTANCE)     
-
-    lll = ll[:, :PATH_DISTANCE] + LANE_OFFSET + 0.1
-    lll_stds = tf.math.softplus(ll[:, PATH_DISTANCE:PATH_DISTANCE*2])
-    lll_valid_len = tf.clip_by_value(ll[:, PATH_DISTANCE*2], 5, PATH_DISTANCE) 
-    lll_prob = tf.math.sigmoid(ll[:, PATH_DISTANCE*2 + 1])
-
-    rll = rl[:, :PATH_DISTANCE] - LANE_OFFSET - 0.1
-    rll_stds = tf.math.softplus(rl[:, PATH_DISTANCE:-2])
-    rll_valid_len = tf.clip_by_value(rl[:, -2], 5, PATH_DISTANCE) 
-    rll_prob = tf.math.sigmoid(rl[:, -1])
-
-    lead_prob = tf.math.sigmoid(lead[:, -3]) # lead.shape = (b, 58)
-    lead = tf.reshape(lead[:, :-3], (-1, 5, 11)) # (b, 5, 11)
-    lead_weights = tf.nn.softmax(lead[:, :, 8]) # lead_weights.shape = (b, 5)
-    lidx = tf.math.argmax(lead_weights, axis=-1, output_type=tf.dtypes.int32)   # (b,)
-    
-    # print(f'lidx.shape: {lidx.shape}, para.batch_size: {para.batch_size}')
-
-    idxes = tf.stack([tf.range(tf.shape(lidx)[0]), lidx], axis=1)
-    
-    lead_max = tf.gather_nd(lead, idxes) # (b, 11)
-
-    # scales = [LEAD_X_SCALE, LEAD_Y_SCALE, LEAD_V_SCALE, 1]
-    # lead_xyva = np.column_stack([lead_max[:, i] * scales[i] for i in range(4)])
-
-    lead_xyva = tf.stack([lead_max[:, 0] * LEAD_X_SCALE,
-                                lead_max[:, 1] * LEAD_Y_SCALE,
-                                lead_max[:, 2] * LEAD_V_SCALE,
-                                lead_max[:, 3]], axis=-1)                          
-    
-    lead_xyva_std = tf.stack([tf.math.softplus(lead_max[:, 4]) * LEAD_X_SCALE,
-                                tf.math.softplus(lead_max[:, 5]) * LEAD_Y_SCALE,
-                                tf.math.softplus(lead_max[:, 6]) * LEAD_V_SCALE,
-                                tf.math.softplus(lead_max[:, 7])], axis=-1)
-
-
-    # lead_xyva_std = np.column_stack([tf.math.softplus(lead_max[:, 4+i]) * scales[i] for i in range(4)])
-
-    return path, path_stds, path_valid_len, lll, lll_stds, lll_valid_len, lll_prob, \
-        rll, rll_stds, rll_valid_len, rll_prob, lead_xyva, lead_xyva_std, *y[4:]
-
-
-
-
-
-
-
-
 
 PATH_DISTANCE = 192
 LANE_OFFSET = 1.8
@@ -534,47 +462,28 @@ def train_loss_fn(y_true, y_pred):
     # o11 = outputs[:, STATE_IDX:  OUTPUT_IDX]
 
    
-    path_loss = path_loss_fn(y_true[:, PATH_IDX:LL_IDX], y_pred[:, PATH_IDX:LL_IDX])
-    ll_loss = lane_loss_fn(y_true[:, LL_IDX:RL_IDX], y_pred[:, LL_IDX:RL_IDX], +1)
-    rl_loss = lane_loss_fn(y_true[:, RL_IDX:LEAD_IDX], y_pred[:, RL_IDX:LEAD_IDX], -1)
-    lead_loss = lead_loss_fn(y_true[:, LEAD_IDX:LONG_X_IDX], y_pred[:, LEAD_IDX:LONG_X_IDX])
+    # path_loss = path_loss_fn(y_true[:, PATH_IDX:LL_IDX], y_pred[:, PATH_IDX:LL_IDX])
+    # ll_loss = lane_loss_fn(y_true[:, LL_IDX:RL_IDX], y_pred[:, LL_IDX:RL_IDX], +1)
+    # rl_loss = lane_loss_fn(y_true[:, RL_IDX:LEAD_IDX], y_pred[:, RL_IDX:LEAD_IDX], -1)
+    # lead_loss = lead_loss_fn(y_true[:, LEAD_IDX:LONG_X_IDX], y_pred[:, LEAD_IDX:LONG_X_IDX])
 
-    return path_loss + ll_loss + rl_loss + lead_loss
+    # return path_loss + ll_loss + rl_loss + lead_loss
 
-    # print(f'p_true.shape: {p_true.shape}, type(p_true): {type(p_true)}')
-    # print(f'p_pred.shape: {p_pred.shape}, type(p_pred): {type(p_pred)}')
-    # total_loss = tf.keras.losses.mse(p_true, p_pred)
-    # print(f'total_loss: {total_loss}')
-    # return tf.math.reduce_mean(total_loss)
-
-
-
-# # @tf.function
-# def _train_step(X_step, Y_step):
+    total_loss = tf.keras.losses.mse(y_true[:STATE_IDX], y_pred[:STATE_IDX])
     
-
-#     with tf.GradientTape() as tape:
-        
-#         Y_pred = model(X_step, training=True) # Y_pred: list. 
-#         loss = train_loss_fn(Y_step, Y_pred)        
-      
-#     grad = tape.gradient(loss, model.trainable_variables)
-  
-#     metric = tf.reduce_mean(maxae(tf.concat(Y_step, axis=-1), tf.concat(Y_pred, axis=-1)))
-   
-#     return loss, metric, grad
-
+    return tf.math.reduce_mean(total_loss)
 
 
 
 
     
 @tf.function
-def _train_step(X_step, Y_step):
+def train_step(X_step, Y_step):
 
 
     Y_step = tf.concat(Y_step, axis=-1)
     
+    # print(f'type(X_step): {type(X_step)}')
 
     with tf.GradientTape() as tape:
         
@@ -588,15 +497,52 @@ def _train_step(X_step, Y_step):
     grad = tape.gradient(loss, model.trainable_variables)
 
     
-    metric = tf.reduce_mean(maxae(Y_step, Y_pred))
+    metric = tf.reduce_mean(maxae(Y_step[:STATE_IDX], Y_pred[:STATE_IDX]))
    
-    return loss, metric, grad
-
-
-
+    return loss, metric, grad, Y_pred[:, STATE_IDX:]
 
 
  
+
+def train_batch(X_batch, Y_batch):
+
+    accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
+    step_size = para.batch_size // para.accum_steps
+    
+    losses = []
+    metrics = []
+ 
+    rnn_st_batch = np.zeros((para.batch_size, 512))
+
+    for step in range(para.accum_steps): 
+ 
+      
+        X_step = [a[step*step_size:(step+1)*step_size] for a in X_batch]
+        Y_step = [a[step*step_size:(step+1)*step_size] for a in Y_batch]
+      
+       
+        loss, metric, grad, rnn_st_step = train_step(X_step, Y_step)
+         
+
+        rnn_st_batch[step*step_size:(step+1)*step_size] = rnn_st_step.numpy()
+ 
+        for i in range(len(accum_gradients)):          
+            accum_gradients[i] += grad[i]
+          
+        losses.append(loss.numpy())
+        metrics.append(metric.numpy())
+      
+  
+
+    averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
+    # clipped_grads, _ = tf.clip_by_global_norm(averaged_gradients, para.grad_norm_clip)
+    optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+
+    return np.mean(losses), np.mean(metrics), tf.convert_to_tensor(rnn_st_batch, dtype=tf.float32)
+        
+
+
+
 
 
 
@@ -612,93 +558,79 @@ optimizer = tf.keras.optimizers.AdamW(learning_rate=para.base_lr,
 
  
 all_pkl = glob.glob("/home/richard/Downloads/TData1/*.pkl") 
-split = int(len(all_pkl) * 0.8)
+split = int(len(all_pkl) * 0.85)
 train_pkl = all_pkl[:split]
 val_pkl = all_pkl[split:]
-
-train_dataset = get_data(train_pkl, para.file_batch_size, para.batch_size, debug=False)
-val_dataset = get_data(val_pkl, 1, 2, debug=True)
+ 
 
 
-# exit()
-
-
-with open("log.txt", "w") as f: f.write("")
-with open("val.txt", "w") as f: f.write("")
+train_episodes = gen_episodes_train(train_pkl)
+val_episodes = gen_episodes_val(val_pkl)
 
  
+
+# with open("log.txt", "w") as f: f.write("")
+# with open("val.txt", "w") as f: f.write("")
+
+ 
+
+B = para.batch_size
+H = para.horizon
+
 update_counts = 0
-for epoch in range(10000):
-
-
-    for i, batch in enumerate(train_dataset): # have ~600 training batches.
-
-        X, Y, _ = batch                    
-
-        total_loss = 0.0
-        total_metric = 0.0
  
-        accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
-        step_size = para.batch_size // para.accum_steps
-        
+for eidx, episodes in enumerate(train_episodes): # have ~600 training batches.
+
+    X0, Y = episodes
+
+    losses = []
+    metrics = []
+
+    X1_batch = tf.convert_to_tensor(np.zeros((B, 8)), dtype=tf.float32)
+    X2_batch = tf.convert_to_tensor(np.zeros((B, 2)), dtype=tf.float32)
+    rnn_st_batch = tf.convert_to_tensor(np.zeros((B, 512)), dtype=tf.float32)
+
+    progress_bar = tqdm(total=H, desc="executing episodes...")
+
+    for t in range(H): 
+
+        progress_bar.update(1)
   
-        for step in range(para.accum_steps): 
+        X0_batch = tf.convert_to_tensor(X0[:, t, ...], dtype=tf.float32)
+        Y_batch = [tf.convert_to_tensor(y[:, t, ...], dtype=tf.float32) for y in Y]
+      
+        X_batch = [X0_batch, X1_batch, X2_batch, rnn_st_batch]
  
-            # print(f"## (len(tf.config.experimental.list_physical_devices('GPU'))): {(len(tf.config.experimental.list_physical_devices('GPU')))}")
-            X_step = [a[step*step_size:(step+1)*step_size] for a in X]
-            Y_step = [a[step*step_size:(step+1)*step_size] for a in Y]
-            # Y_step = Y[step*step_size:(step+1)*step_size]
-            
-         
- 
-            loss, metric, grad = _train_step(X_step, Y_step)
- 
- 
-            for i in range(len(accum_gradients)):
-                 
-                accum_gradients[i] += grad[i]
-            
-
-            # print(f'## a, loss: {loss}')
-            total_loss += loss.numpy() 
-
-            # print(f'## b, metric: {metric}')
-
-            total_metric += metric.numpy() 
-
-            # print(f'## c')
-
- 
-        averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
-        # clipped_grads, _ = tf.clip_by_global_norm(averaged_gradients, para.grad_norm_clip)
-        optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
-
+        loss, metric, rnn_st_batch = train_batch(X_batch, Y_batch)
      
+        losses.append(loss) 
+        metrics.append(metric) 
+
         update_counts += 1
         lr_next = lr_scheduler(update_counts)
         tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
 
 
 
-        if update_counts % para.log_interval == 0:
-            log = f'[{update_counts}] train loss: {total_loss / para.accum_steps}' + \
-                          f', train metric: {total_metric / para.accum_steps}' + f', lr: {lr_next}' 
-            print(log)
-            with open("log.txt", "a") as f: f.write(log + '\n')
+    if eidx % para.log_interval == 0:
+        log = f'[{eidx}] train loss: {np.mean(losses)}' + \
+                      f', train metric: {np.mean(metrics)}' + f', lr: {lr_next}' 
+        print(log)
+        with open("log.txt", "a") as f: f.write(log + '\n')
 
-        
+    
 
-        if update_counts % para.validate_interval == 0:
-            print(f'validating...') 
-            loss, metric = validate()
-            log = f'[{update_counts}] val loss: {loss}, val metric: {metric}'
-            print(log)
-            with open("val.txt", "a") as f: f.write(log + '\n')                
-        
+    if eidx % para.validate_interval == 0:
+        print(f'validating...') 
+        loss, metric = validate()
+        log = f'[{update_counts}] val loss: {loss}, val metric: {metric}'
+        print(log)
+        with open("val.txt", "a") as f: f.write(log + '\n')                
+    
 
-        # if update_counts % para.save_interval == 0:
-        #     model.save_weights(f'ckpt/modelB6-{update_counts}.h5')
-        #     print(f'[{update_counts}] saved ckpt: ckpt/modelB6-{update_counts}.h5')
+    if eidx % para.save_interval == 0:
+        model.save_weights(f'ckpt/modelB6-{eidx}.h5')
+        print(f'[{eidx}] saved ckpt: ckpt/modelB6-{eidx}.h5')
 
   
 
