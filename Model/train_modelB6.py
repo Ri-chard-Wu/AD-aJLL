@@ -64,8 +64,8 @@ para = AttrDict(
     'ema_momentum': 0.99, #0.99,
 
     'log_interval': 1,
-    'save_interval': 20,
-    'validate_interval': 20,
+    'save_interval': 10,
+    'validate_interval': 10,
 
     'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
   }
@@ -228,7 +228,7 @@ def validate(n=3):
         X2_batch = tf.convert_to_tensor(np.zeros((1, 2)), dtype=tf.float32)
         rnn_st_batch = tf.convert_to_tensor(np.zeros((1, 512)), dtype=tf.float32)
 
-        progress_bar = tqdm(total=H, desc="executing val episodes...")
+        progress_bar = tqdm(total=H, desc=f"executing val episodes {i+1} / {n}...")
           
         losses = []
         metrics = []
@@ -268,7 +268,7 @@ def validate(n=3):
 
             rnn_st_batch = Y_pred_batch[:, STATE_IDX:]
  
-            loss = train_loss_fn(Y_batch[:, :STATE_IDX], Y_pred_batch[:, :STATE_IDX])
+            loss = train_loss_fn(Y_batch, Y_pred_batch)
             metric = tf.reduce_mean(maxae(Y_batch[:, :STATE_IDX], Y_pred_batch[:, :STATE_IDX]))
 
           
@@ -477,7 +477,7 @@ def train_loss_fn(y_true, y_pred):
 
     # return path_loss + ll_loss + rl_loss + lead_loss
 
-    total_loss = tf.keras.losses.mse(y_true[:STATE_IDX], y_pred[:STATE_IDX])
+    total_loss = tf.keras.losses.mse(y_true[:, :STATE_IDX], y_pred[:, :STATE_IDX])
     
     return tf.math.reduce_mean(total_loss)
 
@@ -505,7 +505,7 @@ def train_step(X_step, Y_step):
     grad = tape.gradient(loss, model.trainable_variables)
 
     
-    metric = tf.reduce_mean(maxae(Y_step[:STATE_IDX], Y_pred[:STATE_IDX]))
+    metric = tf.reduce_mean(maxae(Y_step[:, :STATE_IDX], Y_pred[:, :STATE_IDX]))
    
     return loss, metric, grad, Y_pred[:, STATE_IDX:]
 
