@@ -45,6 +45,31 @@ class AttrDict(dict):
         return self[a]
 
  
+# para = AttrDict(
+#   {
+
+#     'total_steps': 1000,
+#     'base_lr': 1e-3,
+#     'decay_type': 'cosine',
+#     'warmup_steps': 5,
+#     'grad_norm_clip': 1,
+#     'lr_min': 1e-4,
+
+#     'accum_steps': 16,
+#     'batch_size': 32,
+#     'file_batch_size': 16,
+
+#     'weight_decay': 0.004, # 0.05
+#     'ema_momentum': 0.99, #0.99,
+
+#     'log_interval': 5,
+#     'save_interval': 100,
+#     'validate_interval': 100,
+
+#     'ckpt_load_path': f'ckpt/modelB6-{17200}.h5',
+#   }
+# ) 
+
 para = AttrDict(
   {
 
@@ -55,46 +80,24 @@ para = AttrDict(
     'grad_norm_clip': 1,
     'lr_min': 1e-4,
 
-    'accum_steps': 8,
+    'accum_steps': 16,
     'batch_size': 32,
-    'file_batch_size': 16,
+    'file_batch_size': 2,
 
     'weight_decay': 0.004, # 0.05
     'ema_momentum': 0.99, #0.99,
 
-    'log_interval': 1,
+    'log_interval': 5,
     'save_interval': 100,
     'validate_interval': 100,
 
-    # 'ckpt_load_path': f'ckpt/modelB6-{2100}.h5',
+    'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
   }
 ) 
 
 
-
  
-PATH_DISTANCE = 192
-LANE_OFFSET = 1.8
-LEAD_X_SCALE = 10   # x_scale in driving.cc
-LEAD_Y_SCALE = 10   # y_scale in driving.cc
-LEAD_V_SCALE = 1
 
-
-# def normalize_img(imgs):
-
- 
-#     assert imgs.shape[1] == 12
-
-#     c = 12
-
-#     mean = [np.mean(imgs[:, i, ...]) for i in range(c)]
-#     std = [np.std(imgs[:, i, ...]) for i in range(c)]
-  
-
-#     for i in range(c):
-#         imgs[:, i, ...] = (imgs[:, i, ...] - mean[i]) / std[i]
-
-#     return imgs
 
 
 def get_frames(hevc_file):
@@ -186,7 +189,7 @@ def sample_data(file_batch, num_sample, debug=False):
     
 
 
-def get_data(pkl_files, file_batch_size, batch_size, debug=False, num_sample = 30):
+def get_data(pkl_files, file_batch_size, batch_size, debug=False, num_sample = 50):
 
     print(f'## n data: {len(pkl_files)}')   
 
@@ -237,67 +240,6 @@ def get_data(pkl_files, file_batch_size, batch_size, debug=False, num_sample = 3
 
 
  
-
-def maxae(y_true, y_pred):
-  # [for i in range(len(y_true))]
-  return KB.max(KB.abs(y_pred - y_true), axis=-1)
-
- 
-
-def parse_outs(y):
-
-    # Y_shape = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
-
-    # p, ll, rl, lead, long_x, long_v, long_a, desire_state, meta, desire_pred, pose, state = y
-    
-    p, ll, rl, lead = y[:4]
-   
-
-    path = p[:, :PATH_DISTANCE] + 0.1
-    path_stds = tf.math.softplus(p[:, PATH_DISTANCE:PATH_DISTANCE*2])    
-    path_valid_len = tf.clip_by_value(p[:, PATH_DISTANCE*2], 5, PATH_DISTANCE)     
-
-    lll = ll[:, :PATH_DISTANCE] + LANE_OFFSET + 0.1
-    lll_stds = tf.math.softplus(ll[:, PATH_DISTANCE:PATH_DISTANCE*2])
-    lll_valid_len = tf.clip_by_value(ll[:, PATH_DISTANCE*2], 5, PATH_DISTANCE) 
-    lll_prob = tf.math.sigmoid(ll[:, PATH_DISTANCE*2 + 1])
-
-    rll = rl[:, :PATH_DISTANCE] - LANE_OFFSET - 0.1
-    rll_stds = tf.math.softplus(rl[:, PATH_DISTANCE:-2])
-    rll_valid_len = tf.clip_by_value(rl[:, -2], 5, PATH_DISTANCE) 
-    rll_prob = tf.math.sigmoid(rl[:, -1])
-
-    lead_prob = tf.math.sigmoid(lead[:, -3]) # lead.shape = (b, 58)
-    lead = tf.reshape(lead[:, :-3], (-1, 5, 11)) # (b, 5, 11)
-    lead_weights = tf.nn.softmax(lead[:, :, 8]) # lead_weights.shape = (b, 5)
-    lidx = tf.math.argmax(lead_weights, axis=-1, output_type=tf.dtypes.int32)   # (b,)
-    
-    # print(f'lidx.shape: {lidx.shape}, para.batch_size: {para.batch_size}')
-
-    idxes = tf.stack([tf.range(tf.shape(lidx)[0]), lidx], axis=1)
-    
-    lead_max = tf.gather_nd(lead, idxes) # (b, 11)
-
-    # scales = [LEAD_X_SCALE, LEAD_Y_SCALE, LEAD_V_SCALE, 1]
-    # lead_xyva = np.column_stack([lead_max[:, i] * scales[i] for i in range(4)])
-
-    lead_xyva = tf.stack([lead_max[:, 0] * LEAD_X_SCALE,
-                                lead_max[:, 1] * LEAD_Y_SCALE,
-                                lead_max[:, 2] * LEAD_V_SCALE,
-                                lead_max[:, 3]], axis=-1)                          
-    
-    lead_xyva_std = tf.stack([tf.math.softplus(lead_max[:, 4]) * LEAD_X_SCALE,
-                                tf.math.softplus(lead_max[:, 5]) * LEAD_Y_SCALE,
-                                tf.math.softplus(lead_max[:, 6]) * LEAD_V_SCALE,
-                                tf.math.softplus(lead_max[:, 7])], axis=-1)
-
-
-    # lead_xyva_std = np.column_stack([tf.math.softplus(lead_max[:, 4+i]) * scales[i] for i in range(4)])
-
-    return path, path_stds, path_valid_len, lll, lll_stds, lll_valid_len, lll_prob, \
-        rll, rll_stds, rll_valid_len, rll_prob, lead_xyva, lead_xyva_std, *y[4:]
-
-
 
 
 def validate(n=20):
@@ -367,38 +309,266 @@ def lr_scheduler(step):
 
  
 
-def train_loss_fn(y_true, y_pred):
+def maxae(y_true, y_pred):
+  # [for i in range(len(y_true))]
+  return KB.max(KB.abs(y_pred - y_true), axis=-1)
+
+ 
+
+def parse_outs(y):
+
+    # Y_shape = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
+
+    # p, ll, rl, lead, long_x, long_v, long_a, desire_state, meta, desire_pred, pose, state = y
     
+    p, ll, rl, lead = y[:4]
+   
 
-    # # print(f'len(y_true): {len(y_true)}, type(y_true): {type(y_true)}')
-    # # print(f'len(y_pred): {len(y_pred)}, type(y_pred): {type(y_pred)}')
+    path = p[:, :PATH_DISTANCE] + 0.1
+    path_stds = tf.math.softplus(p[:, PATH_DISTANCE:PATH_DISTANCE*2])    
+    path_valid_len = tf.clip_by_value(p[:, PATH_DISTANCE*2], 5, PATH_DISTANCE)     
 
-    # y_true = parse_outs(y_true)
-    # y_pred = parse_outs(y_pred)
+    lll = ll[:, :PATH_DISTANCE] + LANE_OFFSET + 0.1
+    lll_stds = tf.math.softplus(ll[:, PATH_DISTANCE:PATH_DISTANCE*2])
+    lll_valid_len = tf.clip_by_value(ll[:, PATH_DISTANCE*2], 5, PATH_DISTANCE) 
+    lll_prob = tf.math.sigmoid(ll[:, PATH_DISTANCE*2 + 1])
 
-    # # for i in tf.range(x):  # Use tf.range() for TensorFlow's tensors
-    # #     sum_value += tf.cast(i, tf.float32)
+    rll = rl[:, :PATH_DISTANCE] - LANE_OFFSET - 0.1
+    rll_stds = tf.math.softplus(rl[:, PATH_DISTANCE:-2])
+    rll_valid_len = tf.clip_by_value(rl[:, -2], 5, PATH_DISTANCE) 
+    rll_prob = tf.math.sigmoid(rl[:, -1])
 
-    # means = [tf.math.reduce_mean(y) for y in y_true]
-    # stds = [tf.math.reduce_std(y) for y in y_true]
+    lead_prob = tf.math.sigmoid(lead[:, -3]) # lead.shape = (b, 58)
+    lead = tf.reshape(lead[:, :-3], (-1, 5, 11)) # (b, 5, 11)
+    lead_weights = tf.nn.softmax(lead[:, :, 8]) # lead_weights.shape = (b, 5)
+    lidx = tf.math.argmax(lead_weights, axis=-1, output_type=tf.dtypes.int32)   # (b,)
+    
+    # print(f'lidx.shape: {lidx.shape}, para.batch_size: {para.batch_size}')
+
+    idxes = tf.stack([tf.range(tf.shape(lidx)[0]), lidx], axis=1)
+    
+    lead_max = tf.gather_nd(lead, idxes) # (b, 11)
+
+    # scales = [LEAD_X_SCALE, LEAD_Y_SCALE, LEAD_V_SCALE, 1]
+    # lead_xyva = np.column_stack([lead_max[:, i] * scales[i] for i in range(4)])
+
+    lead_xyva = tf.stack([lead_max[:, 0] * LEAD_X_SCALE,
+                                lead_max[:, 1] * LEAD_Y_SCALE,
+                                lead_max[:, 2] * LEAD_V_SCALE,
+                                lead_max[:, 3]], axis=-1)                          
+    
+    lead_xyva_std = tf.stack([tf.math.softplus(lead_max[:, 4]) * LEAD_X_SCALE,
+                                tf.math.softplus(lead_max[:, 5]) * LEAD_Y_SCALE,
+                                tf.math.softplus(lead_max[:, 6]) * LEAD_V_SCALE,
+                                tf.math.softplus(lead_max[:, 7])], axis=-1)
 
 
-    # y_true = [(y_true[i] - means[i]) / stds[i] for i in range(len(y_true))]
-    # y_pred = [(y_pred[i] - means[i]) / stds[i] for i in range(len(y_true))]
-  
-    # total_loss = 0
-    # for i in range(len(y_true)): 
-    #     total_loss += tf.keras.losses.mse(y_true[i], y_pred[i]) # (b,)
-    #     # total_loss += tf.clip_by_value(loss, 0, 1) 
+    # lead_xyva_std = np.column_stack([tf.math.softplus(lead_max[:, 4+i]) * scales[i] for i in range(4)])
 
-    # print(f'y_true.shape: {y_true.shape}, y_pred.shape: {y_pred.shape}')
-    total_loss = tf.keras.losses.mse(y_true, y_pred)
-  
-    return tf.math.reduce_mean(total_loss)
+    return path, path_stds, path_valid_len, lll, lll_stds, lll_valid_len, lll_prob, \
+        rll, rll_stds, rll_valid_len, rll_prob, lead_xyva, lead_xyva_std, *y[4:]
 
+
+
+
+
+
+
+
+
+PATH_DISTANCE = 192
+LANE_OFFSET = 1.8
+LEAD_X_SCALE = 10   # x_scale in driving.cc
+LEAD_Y_SCALE = 10   # y_scale in driving.cc
+LEAD_V_SCALE = 1
 
 
  
+PATH_IDX   = 0      # o0:  192*2+1 = 385
+LL_IDX     = 385    # o1:  192*2+2 = 386
+RL_IDX     = 771    # o2:  192*2+2 = 386
+LEAD_IDX   = 1157   # o3:  11*5+3 = 58
+LONG_X_IDX = 1215   # o4:  100*2 = 200
+LONG_V_IDX = 1415   # o5:  100*2 = 200
+LONG_A_IDX = 1615   # o6:  100*2 = 200
+DESIRE_IDX = 1815   # o7:  8
+META_IDX   = 1823   # o8:  4
+PRED_IDX   = 1827   # o9:  32
+POSE_IDX   = 1859   # o10: 12
+STATE_IDX  = 1871   # o11: 512
+OUTPUT_IDX = 2383
+ 
+
+
+def standardize(y_true, y_pred):
+
+    eps = 1
+
+    mean = tf.math.reduce_mean(y_true)
+    std = tf.math.reduce_std(y_true) 
+
+    # print(f'std: {std}')
+    std = tf.math.maximum(std, eps)
+
+
+    return (y_true - mean) / std, (y_pred - mean) / std
+
+
+
+def path_loss_fn(path_true, path_pred):
+    
+    def parse(p):
+
+        path = p[:, :PATH_DISTANCE] 
+        path_stds = tf.math.softplus(p[:, PATH_DISTANCE:PATH_DISTANCE*2])    
+        path_valid_len = tf.clip_by_value(p[:, PATH_DISTANCE*2], 5, PATH_DISTANCE)     
+
+        return path, path_stds, path_valid_len
+
+    def loss_fn(y_true, y_pred):
+        y_true, y_pred = standardize(y_true, y_pred)
+        loss = tf.keras.losses.mse(y_true, y_pred)
+        return tf.math.reduce_mean(loss)
+
+    path_true, path_std_true, path_valid_len_true = parse(path_true)
+    path_pred, path_std_pred, path_valid_len_pred = parse(path_pred)
+   
+    return loss_fn(path_true, path_pred) + loss_fn(path_std_true, path_std_pred) + \
+                                    loss_fn(path_valid_len_true, path_valid_len_pred)
+
+
+
+
+def lane_loss_fn(lane_true, lane_pred, sign):
+    '''
+        sign: +1 for left lane, -1 for right lane.
+    '''
+ 
+    def parse(l):
+
+        lane = l[:, :PATH_DISTANCE] + sign * LANE_OFFSET 
+        lane_std = tf.math.softplus(l[:, PATH_DISTANCE:PATH_DISTANCE*2])
+        lane_valid_len = tf.clip_by_value(l[:, PATH_DISTANCE*2], 5, PATH_DISTANCE) 
+        lane_prob = tf.math.sigmoid(l[:, PATH_DISTANCE*2 + 1])
+
+        return lane, lane_std, lane_valid_len, lane_prob
+
+
+    def loss_fn(y_true, y_pred):
+        y_true, y_pred = standardize(y_true, y_pred)
+        loss = tf.keras.losses.mse(y_true, y_pred)
+        return tf.math.reduce_mean(loss)
+
+    lane_true, lane_std_true, lane_valid_len_true, lane_prob_true = parse(lane_true)
+    lane_pred, lane_std_pred, lane_valid_len_pred, lane_prob_pred = parse(lane_pred)
+    
+   
+    return loss_fn(lane_true, lane_pred) + loss_fn(lane_std_true, lane_std_pred) + \
+            loss_fn(lane_valid_len_true, lane_valid_len_pred) + loss_fn(lane_prob_true, lane_prob_pred)
+
+ 
+
+
+def lead_loss_fn(lead_true, lead_pred):
+  
+ 
+    def parse(l):
+
+        # lead_prob = tf.math.sigmoid(l[:, -3]) # lead.shape = (b, 58)
+        
+        lead = tf.reshape(l[:, :-3], (-1, 5, 11)) # (b, 5, 11)
+ 
+        lead_weights = tf.nn.softmax(lead[:, :, 8]) # lead_weights.shape = (b, 5)
+  
+        lidx = tf.math.argmax(lead_weights, axis=-1, output_type=tf.dtypes.int32)   # (b,)         
+ 
+        idxes = tf.stack([tf.range(tf.shape(lidx)[0]), lidx], axis=1)
+ 
+        lead_max = tf.gather_nd(lead, idxes) # (b, 11)
+ 
+
+        x = lead_max[:, 0] * LEAD_X_SCALE
+        y = lead_max[:, 1] * LEAD_Y_SCALE
+        v = lead_max[:, 2] * LEAD_V_SCALE
+        a = lead_max[:, 3] 
+
+        x_std = tf.math.softplus(lead_max[:, 4]) * LEAD_X_SCALE
+        y_std = tf.math.softplus(lead_max[:, 5]) * LEAD_Y_SCALE
+        v_std = tf.math.softplus(lead_max[:, 6]) * LEAD_V_SCALE
+        a_std = tf.math.softplus(lead_max[:, 7])
+
+        return x, y, v, a, x_std, y_std, v_std, a_std 
+
+
+    def loss_fn(y_true, y_pred):
+        y_true, y_pred = standardize(y_true, y_pred)
+        loss = tf.keras.losses.mse(y_true, y_pred)
+        return tf.math.reduce_mean(loss)
+
+    x_true, y_true, v_true, a_true, x_std_true, y_std_true, v_std_true, a_std_true = parse(lead_true)
+    x_pred, y_pred, v_pred, a_pred, x_std_pred, y_std_pred, v_std_pred, a_std_pred = parse(lead_pred)
+    
+   
+    return loss_fn(x_true, x_pred) + loss_fn(y_true, y_pred) + loss_fn(v_true, v_pred) + \
+           loss_fn(a_true, a_pred) + loss_fn(x_std_true, x_std_pred) + loss_fn(y_std_true, y_std_pred) + \
+            loss_fn(v_std_true, v_std_pred) + loss_fn(a_std_true, a_std_pred)
+
+ 
+
+
+
+def train_loss_fn(y_true, y_pred):
+    
+ 
+    # o0  = outputs[:, PATH_IDX:   LL_IDX]   #--- o0.shape = (1, 385)
+    # o1  = outputs[:, LL_IDX:     RL_IDX]
+    # o2  = outputs[:, RL_IDX:     LEAD_IDX]
+    # o3  = outputs[:, LEAD_IDX:   LONG_X_IDX]
+    # o4  = outputs[:, LONG_X_IDX: LONG_V_IDX]
+    # o5  = outputs[:, LONG_V_IDX: LONG_A_IDX]
+    # o6  = outputs[:, LONG_A_IDX: DESIRE_IDX]
+    # o7  = outputs[:, DESIRE_IDX: META_IDX]
+    # o8  = outputs[:, META_IDX:   PRED_IDX]
+    # o9  = outputs[:, PRED_IDX:   POSE_IDX]
+    # o10 = outputs[:, POSE_IDX:   STATE_IDX]
+    # o11 = outputs[:, STATE_IDX:  OUTPUT_IDX]
+
+   
+    path_loss = path_loss_fn(y_true[:, PATH_IDX:LL_IDX], y_pred[:, PATH_IDX:LL_IDX])
+    ll_loss = lane_loss_fn(y_true[:, LL_IDX:RL_IDX], y_pred[:, LL_IDX:RL_IDX], +1)
+    rl_loss = lane_loss_fn(y_true[:, RL_IDX:LEAD_IDX], y_pred[:, RL_IDX:LEAD_IDX], -1)
+    lead_loss = lead_loss_fn(y_true[:, LEAD_IDX:LONG_X_IDX], y_pred[:, LEAD_IDX:LONG_X_IDX])
+
+    return path_loss + ll_loss + rl_loss + lead_loss
+
+    # print(f'p_true.shape: {p_true.shape}, type(p_true): {type(p_true)}')
+    # print(f'p_pred.shape: {p_pred.shape}, type(p_pred): {type(p_pred)}')
+    # total_loss = tf.keras.losses.mse(p_true, p_pred)
+    # print(f'total_loss: {total_loss}')
+    # return tf.math.reduce_mean(total_loss)
+
+
+
+# # @tf.function
+# def _train_step(X_step, Y_step):
+    
+
+#     with tf.GradientTape() as tape:
+        
+#         Y_pred = model(X_step, training=True) # Y_pred: list. 
+#         loss = train_loss_fn(Y_step, Y_pred)        
+      
+#     grad = tape.gradient(loss, model.trainable_variables)
+  
+#     metric = tf.reduce_mean(maxae(tf.concat(Y_step, axis=-1), tf.concat(Y_pred, axis=-1)))
+   
+#     return loss, metric, grad
+
+
+
+
+
+    
 @tf.function
 def _train_step(X_step, Y_step):
 
@@ -521,14 +691,14 @@ for epoch in range(10000):
         if update_counts % para.validate_interval == 0:
             print(f'validating...') 
             loss, metric = validate()
-            log = f'val loss: {loss}, val metric: {metric}'
+            log = f'[{update_counts}] val loss: {loss}, val metric: {metric}'
             print(log)
             with open("val.txt", "a") as f: f.write(log + '\n')                
         
 
-        if update_counts % para.save_interval == 0:
-            model.save_weights(f'ckpt/modelB6-{update_counts}.h5')
-            print(f'saved ckpt: ckpt/modelB6-{update_counts}.h5')
+        # if update_counts % para.save_interval == 0:
+        #     model.save_weights(f'ckpt/modelB6-{update_counts}.h5')
+        #     print(f'[{update_counts}] saved ckpt: ckpt/modelB6-{update_counts}.h5')
 
   
 
