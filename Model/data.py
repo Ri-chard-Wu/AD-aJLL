@@ -55,8 +55,9 @@ def plot_outs(outs, frame, dir_name, file_name):
     x_lspace = np.linspace(1, PATH_DISTANCE, PATH_DISTANCE)  
     
     # outs = [a.numpy() for a in outs]
- 
+  
     parsed = parser(outs)
+    
       #--- len(parsed) = 25
       #[print("#--- parsed[", x, "].shape =", parsed[x].shape) for x in parsed]   # see output.txt
     

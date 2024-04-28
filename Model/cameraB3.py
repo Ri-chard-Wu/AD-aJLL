@@ -240,7 +240,8 @@ def draw_path(img, path, x_lspace):
         u1,v1,u2,v2 = new_xl_path[i-1], new_yl_path[i-1], new_xr_path[i-1], new_yr_path[i-1]
         u3,v3,u4,v4 = new_xl_path[i], new_yl_path[i], new_xr_path[i], new_yr_path[i]
 
-
+        # print(f'# u1,v1,u2,v2: {u1,v1,u2,v2}')
+        # print(f'# u3,v3,u4,v4: {u3,v3,u4,v4}')
         pts = np.array([[u1,v1],[u2,v2],[u4,v4],[u3,v3]], np.int32).reshape((-1,1,2))
 
         if fill_color:

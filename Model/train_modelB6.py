@@ -57,19 +57,20 @@ para = AttrDict(
 
     'accum_steps': 8,
     'batch_size': 16,
-    'horizon': 50,
+    'horizon': 128,
     'horizon_val': 256,
 
     'weight_decay': 0.004, # 0.05
     'ema_momentum': 0.99, #0.99,
 
     'log_interval': 1,
-    'save_interval': 1,
-    'validate_interval': 1,
+    'save_interval': 20,
+    'validate_interval': 20,
 
     'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
   }
 ) 
+
 
 # para = AttrDict(
 #   {
@@ -136,7 +137,7 @@ def gen_episodes_train(pkl_files):
             X0 = np.zeros((B, H, 12, 128, 256), dtype=np.uint8)            
             Y = [np.zeros((B, H, s)) for s in Y_shape]
  
-            progress_bar = tqdm(total=B, desc="sample_data")
+            progress_bar = tqdm(total=B, desc="sampleing training data...")
              
             for fidx in range(B):
                 
@@ -147,8 +148,8 @@ def gen_episodes_train(pkl_files):
  
                 frames = read_frames(hevc_file) 
                 
-                idx = np.random.choice(np.arange(len(frames)-H), size=1)[0]
-                frames = frames[idx:idx+H+1]
+                t0 = np.random.choice(np.arange(len(frames)-H), size=1)[0]
+                frames = frames[t0:t0+H+1]
  
                 with open(pkl_file, 'rb') as f:      
 
@@ -161,7 +162,7 @@ def gen_episodes_train(pkl_files):
                     X0[fidx, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
 
                     for j in range(12):
-                        Y[j][fidx, t] = data['Y'][j][t]
+                        Y[j][fidx, t] = data['Y'][j][t0+t]
                                                 
             yield X0, Y
 
@@ -185,8 +186,8 @@ def gen_episodes_val(pkl_files):
         Y = [np.zeros((1, H, s)) for s in Y_shape]
      
         frames = read_frames(hevc_file) 
-        idx = np.random.choice(np.arange(len(frames)-H), size=1)[0]
-        frames = frames[idx:idx+H+1]
+        t0 = np.random.choice(np.arange(len(frames)-H), size=1)[0]
+        frames = frames[t0:t0+H+1]
  
         with open(pkl_file, 'rb') as f:      
 
@@ -201,7 +202,7 @@ def gen_episodes_val(pkl_files):
             X0[0, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
 
             for j in range(12):
-                Y[j][0, t] = data['Y'][j][t]
+                Y[j][0, t] = data['Y'][j][t0+t]
 
 
         yield X0, Y, RGBs
@@ -246,10 +247,17 @@ def validate(n=3):
 
 
             if(t%5==0):
-                frame = RGBs[0, t]
-                plot_outs([y.numpy() for y in Y_pred_batch], frame, dir_name=f'output/val/{i}', file_name=f'pred-{t}.png')
-                plot_outs([y.numpy() for y in Y_batch], frame, dir_name=f'output/val/{i}', file_name=f'true-{t}.png')
-    
+
+              try:
+                                  
+                  frame = RGBs[0, t]
+                  plot_outs([y.numpy() for y in Y_pred_batch], frame, dir_name=f'output/val/{i}', file_name=f'pred-{t}.png')
+                  plot_outs([y.numpy() for y in Y_batch], frame, dir_name=f'output/val/{i}', file_name=f'true-{t}.png')
+      
+              except:
+                  print(f'[Warning] plot outs failed.')
+                  return
+
 
 
             Y_pred_batch = tf.concat(Y_pred_batch, axis=-1)
@@ -590,7 +598,7 @@ for eidx, episodes in enumerate(train_episodes): # have ~600 training batches.
     X2_batch = tf.convert_to_tensor(np.zeros((B, 2)), dtype=tf.float32)
     rnn_st_batch = tf.convert_to_tensor(np.zeros((B, 512)), dtype=tf.float32)
 
-    progress_bar = tqdm(total=H, desc="executing episodes...")
+    progress_bar = tqdm(total=H, desc="executing training episodes...")
 
     for t in range(H): 
 

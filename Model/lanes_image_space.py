@@ -84,5 +84,13 @@ def transform_point(x, y):
   KEp = np.dot(intrinsic_matrix, Ep)
 
   p_full_frame = np.array([KEp[0] / KEp[2], KEp[1] / KEp[2], 1.])
-    
-  return p_full_frame[0], p_full_frame[1]
+     
+  # x = p_full_frame[0] if p_full_frame[0] < W and p_full_frame[0] > 0 else np.nan
+  # y = p_full_frame[1] if p_full_frame[1] < W and p_full_frame[1] > 0 else np.nan
+
+  # x = np.clip(p_full_frame[0], 0, W)
+  # y = np.clip(p_full_frame[1], 0, H)
+
+  return x, y
+
+ 
