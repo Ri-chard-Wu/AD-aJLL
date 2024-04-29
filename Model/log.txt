@@ -422,3 +422,4 @@
 [64] train loss: 403.3852233886719, train metric: nan, lr: 0.0009991005063056946
 [65] train loss: 940.69970703125, train metric: nan, lr: 0.0009969500824809074
 [66] train loss: 649.402587890625, train metric: nan, lr: 0.0009935316629707813
+[67] train loss: 483.865234375, train metric: nan, lr: 0.0009888538625091314
