@@ -87,7 +87,7 @@ def plot_outs(outs, frame, dir_name, file_name):
 
 
 
-    plt.title(f"Overlay (truncated)")
+    plt.title(f"Overlay (truncated) l: {l}")
 
 
     L_ll = int(parsed['lll_valid_len']) 

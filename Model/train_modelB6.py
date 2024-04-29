@@ -68,7 +68,7 @@ para = AttrDict(
     'log_interval': 1,
     'save_interval': 10,
     'validate_interval': 10,
-    'update_interval': 32,
+    'update_interval': 8,
 
     # 'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
   }
@@ -756,27 +756,59 @@ U = para.update_interval
 
 @tf.function
 def train_step(X0_interval, Y_interval, step_size):
+# @tf.function
+# def train_step(X0_interval, Y_interval):
 
+
+    # X0_step = X0_interval[:, 0, ...]  
+
+    # Y_interval = tf.concat(Y_interval, axis=-1)    
+    # Y_step = Y_interval[:, 0, ...] 
+    
+    # step_size = 2
 
     X1_step = tf.convert_to_tensor(np.zeros((step_size, 8)), dtype=tf.float32)
     X2_step = tf.convert_to_tensor(np.zeros((step_size, 2)), dtype=tf.float32)
     rnn_st_step = tf.convert_to_tensor(np.zeros((step_size, 512)), dtype=tf.float32)
+ 
+    # X_step = [X0_step, X1_step, X2_step, rnn_st_step]
+
+    # X1_step = tf.convert_to_tensor(np.zeros((step_size, 8)), dtype=tf.float32)
+    # X2_step = tf.convert_to_tensor(np.zeros((step_size, 2)), dtype=tf.float32)
+    # rnn_st_step = tf.convert_to_tensor(np.zeros((step_size, 512)), dtype=tf.float32)
     
+    # X1_step = tf.zeros((step_size, 8), dtype=tf.float32)
+    # X2_step = tf.zeros((step_size, 2), dtype=tf.float32)
+    # rnn_st_step = tf.zeros((step_size, 512), dtype=tf.float32)
+
     loss = 0.0
-    metric = 0.0
+    # metric = 0.0
 
     H1 = X0_interval.shape[1]
 
+    
+    Y_interval = tf.concat(Y_interval, axis=-1)
+
+    
+
+    # X0_step = X0_interval[:, 0, ...]     
+    # # Y_step = [y[:, t, ...] for y in Y_interval]  
+    # Y_step = Y_interval[:, 0, ...]
+    
+    # X_step = [X0_step, X1_step, X2_step, rnn_st_step]
+
     with tf.GradientTape() as tape:
           
-        for t in range(H1): 
+        for t in range(H1):
             # if(t >= X0_interval.shape[1]): break
             
             # X0_step = tf.convert_to_tensor(X0[step*step_size:(step+1)*step_size, t, ...], dtype=tf.float32)
             # Y_step = [tf.convert_to_tensor(y[step*step_size:(step+1)*step_size, t, ...], dtype=tf.float32) for y in Y]    
 
             X0_step = X0_interval[:, t, ...]     
-            Y_step = [y[:, t, ...] for y in Y_interval]    
+            # Y_step = [y[:, t, ...] for y in Y_interval]  
+            Y_step = Y_interval[:, t, ...]
+            
             
             X_step = [X0_step, X1_step, X2_step, rnn_st_step]
         
@@ -785,17 +817,20 @@ def train_step(X0_interval, Y_interval, step_size):
 
             rnn_st_step = Y_pred[:, STATE_IDX:]
 
-            Y_step = tf.concat(Y_step, axis=-1)
-            loss += train_loss_fn(Y_step, Y_pred)    
-            metric += tf.reduce_mean(maxae(Y_step[:, :STATE_IDX], Y_pred[:, :STATE_IDX]))
+            # Y_step = tf.concat(Y_step, axis=-1)
+            loss += train_loss_fn(Y_step, Y_pred)   
 
-    loss = loss / H1
-    metric = metric / H1
+            # tf.print(f"[egr] loss: {loss}") 
+        # metric += tf.reduce_mean(maxae(Y_step[:, :STATE_IDX], Y_pred[:, :STATE_IDX])) 
+    # loss = loss / int
+    # metric = metric / H1
     
 
     grad = tape.gradient(loss, model.trainable_variables)
 
-    return loss, metric, grad
+    return loss / H1, grad
+
+
 
 
 update_counts = 0
@@ -823,14 +858,33 @@ for eidx, episodes in enumerate(train_episodes): # have ~600 training batches.
             X0_interval = tf.convert_to_tensor(X0[step*step_size:(step+1)*step_size, iidx*U:(iidx+1)*U, ...], dtype=tf.float32)
             Y_interval = [tf.convert_to_tensor(y[step*step_size:(step+1)*step_size, iidx*U:(iidx+1)*U, ...], dtype=tf.float32) for y in Y]
 
-            loss, metric, grad = train_step(X0_interval, Y_interval, step_size)
+
+
+
+            # X1_step = tf.convert_to_tensor(np.zeros((step_size, 8)), dtype=tf.float32)
+            # X2_step = tf.convert_to_tensor(np.zeros((step_size, 2)), dtype=tf.float32)
+            # rnn_st_step = tf.convert_to_tensor(np.zeros((step_size, 512)), dtype=tf.float32)
+            
+            # X0_step = X0_interval[:, 0, ...]  
+
+            # Y_interval = tf.concat(Y_interval, axis=-1)    
+            # Y_step = Y_interval[:, 0, ...] 
+            
+            # X_step = [X0_step, X1_step, X2_step, rnn_st_step]
  
+            loss, grad = train_step(X0_interval, Y_interval, step_size)
+
+            # loss, grad = train_step(X0_interval, Y_interval, step_size)
+ 
+            print(f'loss: {loss}')
+            # print(f'grad: {grad[0]}')
+
             for i in range(len(accum_gradients)):          
                 accum_gradients[i] += grad[i]
 
             
             losses.append(loss.numpy())
-            metrics.append(metric.numpy())
+            # metrics.append(metric.numpy())
 
         averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
         optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
