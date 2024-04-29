@@ -74,8 +74,18 @@ def plot_outs(outs, frame, dir_name, file_name):
     
     # print(f"parsed['path_valid_len']: {parsed['path_valid_len']}")
 
-    l = int(parsed['path_valid_len'])    
+    l = int(parsed['path_valid_len'])   
+    
+    # print(f"parsed['path'][0][:l]: {parsed['path'][0][:l]}") 
+
     plt.imshow(draw_path(frame.copy(), parsed["path"][0][:l], x_lspace[:l]))
+
+    # plt.imshow(frame)
+
+    # new_x_path, new_y_path = transform_points(x_lspace[:l], parsed["path"][0][:l]) 
+    # plt.plot(new_x_path, new_y_path, color='g')
+
+
 
     plt.title(f"Overlay (truncated)")
 

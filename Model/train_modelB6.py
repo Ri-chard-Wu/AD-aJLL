@@ -25,6 +25,36 @@ from data import RGB_to_YUV, Y_shape, plot_outs
  
 os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
+
+
+
+# pkl_files = glob.glob("/home/richard/Downloads/TData1/*.pkl") 
+ 
+# for pkl_file in pkl_files:
+    
+#     with open(pkl_file, 'rb') as f:      
+
+#         data = pickle.load(f)    
+#         for i in range(12):
+#             # assert data['Y'][i].shape[1] == Y_shape[i]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
  
 # print(f"## (len(tf.config.experimental.list_physical_devices('GPU'))): {(len(tf.config.experimental.list_physical_devices('GPU')))}")
  
@@ -58,7 +88,7 @@ para = AttrDict(
     'accum_steps': 8,
     'batch_size': 16,
     'horizon': 128,
-    'horizon_val': 256,
+    'horizon_val': 128,
     
 
     'weight_decay': 0.05, # 0.05, 0.004
@@ -67,13 +97,13 @@ para = AttrDict(
     'log_interval': 1,
     'save_interval': 10,
     'validate_interval': 10,
-    'update_interval': 20,
+    'update_interval': 10,
 
     'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
   }
 ) 
 
-
+ 
 # para = AttrDict(
 #   {
 
@@ -84,22 +114,23 @@ para = AttrDict(
 #     'grad_norm_clip': 1,
 #     'lr_min': 1e-4,
 
-#     'accum_steps': 1,
+#     'accum_steps': 8,
 #     'batch_size': 2,
-#     'horizon': 50,
-#     'horizon_val': 1024,
+#     'horizon': 128,
+#     'horizon_val': 256,
+    
 
-#     'weight_decay': 0.004, # 0.05
+#     'weight_decay': 0.05, # 0.05, 0.004
 #     'ema_momentum': 0.99, #0.99,
 
 #     'log_interval': 1,
-#     'save_interval': 1000,
-#     'validate_interval': 1,
+#     'save_interval': 10,
+#     'validate_interval': 10,
+#     'update_interval': 20,
 
-#     'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
+#     # 'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
 #   }
 # ) 
-
 
  
 
@@ -168,6 +199,8 @@ def gen_episodes_train(pkl_files):
                                                 
             yield X0, Y
 
+            del X0, Y
+
 
 
 
@@ -208,6 +241,8 @@ def gen_episodes_val(pkl_files):
 
 
         yield X0, Y, RGBs
+
+        del X0, Y, RGBs
 
  
 
@@ -252,17 +287,12 @@ def validate(n=3):
               frame = RGBs[0, t]
 
               try:                                                                      
-                  plot_outs([y.numpy() for y in Y_batch], frame, dir_name=f'output/val/{i}', file_name=f'true-{t}.png')      
+                  plot_outs([y.numpy() for y in Y_batch], frame, dir_name=f'output/val/{i}', file_name=f'true-{t}.png')
+                  plot_outs([y.numpy() for y in Y_pred_batch], frame, dir_name=f'output/val/{i}', file_name=f'pred-{t}.png')       
               except:
                   print(f'[Warning] plot outs failed.')
                   return
 
-
-              try:
-                  plot_outs([y.numpy() for y in Y_pred_batch], frame, dir_name=f'output/val/{i}', file_name=f'pred-{t}.png')                
-              except:
-                  print(f'[Warning] plot outs failed.')
-                  return
 
 
             Y_pred_batch = tf.concat(Y_pred_batch, axis=-1)
@@ -272,7 +302,7 @@ def validate(n=3):
             # rnn_st_batch = tf.convert_to_tensor(Y_pred_batch[STATE_IDX:].numpy(), dtype=tf.float32)
 
             rnn_st_batch = Y_pred_batch[:, STATE_IDX:]
-            rnn_st_batch = tf.clip_by_value(rnn_st_batch, -1000, 1000)     
+            # rnn_st_batch = tf.clip_by_value(rnn_st_batch, -1000, 1000)     
  
             loss = train_loss_fn(Y_batch, Y_pred_batch)
             metric = tf.reduce_mean(maxae(Y_batch[:, :STATE_IDX], Y_pred_batch[:, :STATE_IDX]))
@@ -280,7 +310,10 @@ def validate(n=3):
           
             losses.append(loss.numpy())
             metrics.append(metric.numpy())
-      
+
+
+        del X0, Y, RGBs
+
     return np.mean(losses), np.mean(metrics)
 
 
@@ -347,6 +380,28 @@ OUTPUT_IDX = 2383
 
 
 
+# avg_scales = {'path_true': [],
+#         'path_std_true': [],
+#         'path_valid_len_true': [],
+#         'lane_true': [],
+#         'lane_std_true': [],
+#         'lane_valid_len_true': [],
+#         'lane_prob_true': [],
+#         'x_true': [],
+#         'y_true': [],
+#         'v_true': [],
+#         'a_true': [],
+#         'x_std_true': [],
+#         'y_std_true': [],
+#         'v_std_true': [],
+#         'a_std_true': [],
+#         'lead_weights_true': [],
+#         'longi_x': [],
+#         'longi_v': [],
+#         'longi_a': [],
+# }
+
+
 def standardize(y_true, y_pred):
 
     eps = 1
@@ -367,27 +422,33 @@ def path_loss_fn(path_true, path_pred):
     def parse(p):
 
         path = p[:, :PATH_DISTANCE] 
-        path_stds = tf.math.softplus(p[:, PATH_DISTANCE:PATH_DISTANCE*2])    
+        # path_stds = tf.math.softplus(p[:, PATH_DISTANCE:PATH_DISTANCE*2])    
+        path_stds = p[:, PATH_DISTANCE:PATH_DISTANCE*2]
         path_valid_len = tf.clip_by_value(p[:, PATH_DISTANCE*2], 5, PATH_DISTANCE)     
 
-        return path, path_stds, path_valid_len
+        return path, path_stds, path_valid_len * 0.01
 
     def loss_fn(y_true, y_pred):
-        y_true, y_pred = standardize(y_true, y_pred)
+        # y_true, y_pred = standardize(y_true, y_pred)
         loss = tf.keras.losses.mse(y_true, y_pred)
         return tf.math.reduce_mean(loss)
 
     def loss_within_valid_len(p_true, p_pred, l): 
         p_true = p_true[:l] # 1D vector.
         p_pred = p_pred[:l] # 1D vector.
-        p_true, p_pred = standardize(p_true, p_pred)        
+        # p_true, p_pred = standardize(p_true, p_pred)        
         loss = tf.keras.losses.mse(p_true, p_pred)
         return loss  # a scalar.
+
 
 
     path_true, path_std_true, path_valid_len_true = parse(path_true)
     path_pred, path_std_pred, path_valid_len_pred = parse(path_pred)
 
+
+    # avg_scales['path_true'].append(tf.math.reduce_mean(path_true).numpy())
+    # avg_scales['path_std_true'].append(tf.math.reduce_mean(path_std_true).numpy())
+    # avg_scales['path_valid_len_true'].append(tf.math.reduce_mean(path_valid_len_true).numpy())
 
     L = tf.cast(path_valid_len_true, dtype=tf.int32)
  
@@ -412,22 +473,24 @@ def lane_loss_fn(lane_true, lane_pred, sign):
     def parse(l):
 
         lane = l[:, :PATH_DISTANCE] + sign * LANE_OFFSET 
-        lane_std = tf.math.softplus(l[:, PATH_DISTANCE:PATH_DISTANCE*2])
+        # lane_std = tf.math.softplus(l[:, PATH_DISTANCE:PATH_DISTANCE*2])
+        lane_std = l[:, PATH_DISTANCE:PATH_DISTANCE*2]
         lane_valid_len = tf.clip_by_value(l[:, PATH_DISTANCE*2], 5, PATH_DISTANCE) 
-        lane_prob = tf.math.sigmoid(l[:, PATH_DISTANCE*2 + 1])
+        # lane_prob = tf.math.sigmoid(l[:, PATH_DISTANCE*2 + 1])
+        lane_prob = l[:, PATH_DISTANCE*2 + 1]
 
-        return lane, lane_std, lane_valid_len, lane_prob
+        return lane, lane_std, lane_valid_len * 0.01, lane_prob
 
 
     def loss_fn(y_true, y_pred):
-        y_true, y_pred = standardize(y_true, y_pred)
+        # y_true, y_pred = standardize(y_true, y_pred)
         loss = tf.keras.losses.mse(y_true, y_pred)
         return tf.math.reduce_mean(loss)
 
     def loss_within_valid_len(p_true, p_pred, l): 
         p_true = p_true[:l] # 1D vector.
         p_pred = p_pred[:l] # 1D vector.
-        p_true, p_pred = standardize(p_true, p_pred)        
+        # p_true, p_pred = standardize(p_true, p_pred)        
         loss = tf.keras.losses.mse(p_true, p_pred)
         return loss # a scalar.
 
@@ -436,6 +499,13 @@ def lane_loss_fn(lane_true, lane_pred, sign):
     lane_pred, lane_std_pred, lane_valid_len_pred, lane_prob_pred = parse(lane_pred)
     
  
+    # avg_scales['lane_true'].append(tf.math.reduce_mean(lane_true).numpy())
+    # avg_scales['lane_std_true'].append(tf.math.reduce_mean(lane_std_true).numpy())
+    # avg_scales['lane_valid_len_true'].append(tf.math.reduce_mean(lane_valid_len_true).numpy())
+    # avg_scales['lane_prob_true'].append(tf.math.reduce_mean(lane_prob_true).numpy())
+
+
+
     L = tf.cast(lane_valid_len_true, dtype=tf.int32)
 
 
@@ -468,31 +538,47 @@ def lead_loss_fn(lead_true, lead_pred):
         lead_max = tf.gather_nd(lead, idxes) # (b, 11)
  
 
-        x = lead_max[:, 0] * LEAD_X_SCALE
-        y = lead_max[:, 1] * LEAD_Y_SCALE
-        v = lead_max[:, 2] * LEAD_V_SCALE
+        x = lead_max[:, 0] #* LEAD_X_SCALE
+        y = lead_max[:, 1] #* LEAD_Y_SCALE
+        v = lead_max[:, 2] #* LEAD_V_SCALE
         a = lead_max[:, 3] 
 
-        x_std = tf.math.softplus(lead_max[:, 4]) * LEAD_X_SCALE
-        y_std = tf.math.softplus(lead_max[:, 5]) * LEAD_Y_SCALE
-        v_std = tf.math.softplus(lead_max[:, 6]) * LEAD_V_SCALE
-        a_std = tf.math.softplus(lead_max[:, 7])
+        # x_std = tf.math.softplus(lead_max[:, 4]) * LEAD_X_SCALE
+        # y_std = tf.math.softplus(lead_max[:, 5]) * LEAD_Y_SCALE
+        # v_std = tf.math.softplus(lead_max[:, 6]) * LEAD_V_SCALE
+        # a_std = tf.math.softplus(lead_max[:, 7])
 
-        return x, y, v, a, x_std, y_std, v_std, a_std 
+        x_std = lead_max[:, 4] 
+        y_std = lead_max[:, 5] 
+        v_std = lead_max[:, 6] 
+        a_std = lead_max[:, 7]
+
+        return x, y*100.0, v, a*10.0, x_std, y_std, v_std, a_std, lead_weights
 
 
     def loss_fn(y_true, y_pred):
-        y_true, y_pred = standardize(y_true, y_pred)
+        # y_true, y_pred = standardize(y_true, y_pred)
         loss = tf.keras.losses.mse(y_true, y_pred)
         return tf.math.reduce_mean(loss)
 
-    x_true, y_true, v_true, a_true, x_std_true, y_std_true, v_std_true, a_std_true = parse(lead_true)
-    x_pred, y_pred, v_pred, a_pred, x_std_pred, y_std_pred, v_std_pred, a_std_pred = parse(lead_pred)
+    x_true, y_true, v_true, a_true, x_std_true, y_std_true, v_std_true, a_std_true, lead_weights_true = parse(lead_true)
+    x_pred, y_pred, v_pred, a_pred, x_std_pred, y_std_pred, v_std_pred, a_std_pred, lead_weights_pred = parse(lead_pred)
     
    
+
+    # avg_scales['x_true'].append(tf.math.reduce_mean(x_true).numpy())
+    # avg_scales['y_true'].append(tf.math.reduce_mean(y_true).numpy())
+    # avg_scales['v_true'].append(tf.math.reduce_mean(v_true).numpy())
+    # avg_scales['a_true'].append(tf.math.reduce_mean(a_true).numpy())
+    # avg_scales['x_std_true'].append(tf.math.reduce_mean(x_std_true).numpy())
+    # avg_scales['y_std_true'].append(tf.math.reduce_mean(y_std_true).numpy())
+    # avg_scales['v_std_true'].append(tf.math.reduce_mean(v_std_true).numpy())
+    # avg_scales['a_std_true'].append(tf.math.reduce_mean(a_std_true).numpy())
+    # avg_scales['lead_weights_true'].append(tf.math.reduce_mean(lead_weights_true).numpy())
+
     return loss_fn(x_true, x_pred) + loss_fn(y_true, y_pred) + loss_fn(v_true, v_pred) + \
            loss_fn(a_true, a_pred) + loss_fn(x_std_true, x_std_pred) + loss_fn(y_std_true, y_std_pred) + \
-            loss_fn(v_std_true, v_std_pred) + loss_fn(a_std_true, a_std_pred)
+            loss_fn(v_std_true, v_std_pred) + loss_fn(a_std_true, a_std_pred) + loss_fn(lead_weights_true, lead_weights_pred)
 
  
 
@@ -500,7 +586,7 @@ def lead_loss_fn(lead_true, lead_pred):
 def longi_loss_fn(longi_true, longi_pred):
    
  
-    loss = tf.math.square(longi_true - longi_pred)[:, :TIME_DISTANCE][:, ::10]
+    loss = tf.math.square(longi_true[:, :TIME_DISTANCE][:, ::10] - longi_pred[:, :TIME_DISTANCE][:, ::10])
 
     loss = tf.math.reduce_mean(loss, axis=-1)
 
@@ -533,9 +619,21 @@ def train_loss_fn(y_true, y_pred):
     rl_loss = lane_loss_fn(y_true[:, RL_IDX:LEAD_IDX], y_pred[:, RL_IDX:LEAD_IDX], -1)
     lead_loss = lead_loss_fn(y_true[:, LEAD_IDX:LONG_X_IDX], y_pred[:, LEAD_IDX:LONG_X_IDX])
  
-    longi_x_loss = longi_loss_fn(y_true[:, LONG_X_IDX:LONG_V_IDX], y_pred[:, LONG_X_IDX:LONG_V_IDX])
+   
+    longi_x_loss = longi_loss_fn(y_true[:, LONG_X_IDX:LONG_V_IDX]*0.1, y_pred[:, LONG_X_IDX:LONG_V_IDX])
     longi_v_loss = longi_loss_fn(y_true[:, LONG_V_IDX:LONG_A_IDX], y_pred[:, LONG_V_IDX:LONG_A_IDX])
     longi_a_loss = longi_loss_fn(y_true[:, LONG_A_IDX:DESIRE_IDX], y_pred[:, LONG_A_IDX:DESIRE_IDX])
+
+
+    # avg_scales['longi_x'].append(tf.math.reduce_mean(y_true[:, LONG_X_IDX:LONG_V_IDX]).numpy()*0.1)
+    # avg_scales['longi_v'].append(tf.math.reduce_mean(y_true[:, LONG_V_IDX:LONG_A_IDX]).numpy())
+    # avg_scales['longi_a'].append(tf.math.reduce_mean(y_true[:, LONG_A_IDX:DESIRE_IDX]).numpy())
+    
+
+    # print('########################')
+    # for k, v in avg_scales.items():
+    #     print(f'{k}: {np.mean(v).round(3)} @ {len(v)}')
+
 
     return path_loss + ll_loss + rl_loss + lead_loss + longi_x_loss + longi_v_loss + longi_a_loss
 
@@ -566,7 +664,7 @@ def train_loss_fn(y_true, y_pred):
 
 
     
-@tf.function
+# @tf.function
 def train_step(X_step, Y_step):
 
 
@@ -580,6 +678,7 @@ def train_step(X_step, Y_step):
 
         Y_pred = tf.concat(Y_pred, axis=-1)
 
+        
         loss = train_loss_fn(Y_step, Y_pred)        
         # loss = tf.reduce_mean(loss)
          
@@ -700,50 +799,66 @@ for eidx, episodes in enumerate(train_episodes): # have ~600 training batches.
       
         X_batch = [X0_batch, X1_batch, X2_batch, rnn_st_batch]
  
-        loss, metric, rnn_st_batch, grad = train_batch(X_batch, Y_batch)
+
+
+
+
+
+        Y_pred = tf.random.uniform((B, 2383))
+        loss = train_loss_fn(tf.concat(Y_batch, axis=-1), Y_pred)   
+
+        continue
+
+
+
+
+
+    #     loss, metric, rnn_st_batch, grad = train_batch(X_batch, Y_batch)
      
-        for i in range(len(accum_gradients)):          
-            accum_gradients[i] += grad[i]
+    #     for i in range(len(accum_gradients)):          
+    #         accum_gradients[i] += grad[i]
 
-        # rnn_st_batch = tf.clip_by_value(rnn_st_batch, -1000, 1000)     
-        print(f'tf.math.reduce_max(rnn_st_batch): {tf.math.reduce_max(rnn_st_batch)}')
-        print(f'tf.math.reduce_min(rnn_st_batch): {tf.math.reduce_min(rnn_st_batch)}')
+    #     # rnn_st_batch = tf.clip_by_value(rnn_st_batch, -1000, 1000)     
+    #     print(f'tf.math.reduce_max(rnn_st_batch): {tf.math.reduce_max(rnn_st_batch)}')
+    #     print(f'tf.math.reduce_min(rnn_st_batch): {tf.math.reduce_min(rnn_st_batch)}')
 
-        losses.append(loss) 
-        metrics.append(metric) 
+    #     losses.append(loss) 
+    #     metrics.append(metric) 
 
-        update_counts += 1
-        lr_next = lr_scheduler(update_counts)
-        tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
+    #     update_counts += 1
+    #     lr_next = lr_scheduler(update_counts)
+    #     tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
 
-        if(t%para.update_interval==0):
+    #     if(t%para.update_interval==0):
 
-            averaged_gradients = [accum_grad / tf.cast(para.update_interval, tf.float32) for accum_grad in accum_gradients]
+    #         averaged_gradients = [accum_grad / tf.cast(para.update_interval, tf.float32) for accum_grad in accum_gradients]
 
-            optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+    #         optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
 
-            accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
+    #         accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
 
 
-    if eidx % para.log_interval == 0:
-        log = f'[{eidx}] train loss: {np.mean(losses)}' + \
-                      f', train metric: {np.mean(metrics)}' + f', lr: {lr_next}' 
-        print(log)
-        with open("log.txt", "a") as f: f.write(log + '\n')
+    # del X0, Y 
+
+    # if eidx % para.log_interval == 0:
+    #     log = f'[{eidx}] train loss: {np.mean(losses)}' + \
+    #                   f', train metric: {np.mean(metrics)}' + f', lr: {lr_next}' 
+    #     print(log)
+    #     with open("log.txt", "a") as f: f.write(log + '\n')
 
     
 
-    if eidx % para.validate_interval == 0:
-        print(f'validating...') 
-        loss, metric = validate()
-        log = f'[{update_counts}] val loss: {loss}, val metric: {metric}'
-        print(log)
-        with open("val.txt", "a") as f: f.write(log + '\n')                
+    # if eidx % para.validate_interval == 0:
+    #     print(f'validating...') 
+    #     loss, metric = validate()
+    #     log = f'[{update_counts}] val loss: {loss}, val metric: {metric}'
+    #     print(log)
+    #     with open("val.txt", "a") as f: f.write(log + '\n')                
     
 
-    if eidx % para.save_interval == 0:
-        model.save_weights(f'ckpt/modelB6-{eidx}.h5')
-        print(f'[{eidx}] saved ckpt: ckpt/modelB6-{eidx}.h5')
+    # if eidx % para.save_interval == 0:
+    #     model.save_weights(f'ckpt/modelB6-{eidx}.h5')
+    #     print(f'[{eidx}] saved ckpt: ckpt/modelB6-{eidx}.h5')
 
   
 

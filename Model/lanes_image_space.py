@@ -91,6 +91,6 @@ def transform_point(x, y):
   # x = np.clip(p_full_frame[0], 0, W)
   # y = np.clip(p_full_frame[1], 0, H)
 
-  return x, y
+  return p_full_frame[0], p_full_frame[1]
 
  
