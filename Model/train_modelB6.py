@@ -27,35 +27,6 @@ os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 
 
 
-
-# pkl_files = glob.glob("/home/richard/Downloads/TData1/*.pkl") 
- 
-# for pkl_file in pkl_files:
-    
-#     with open(pkl_file, 'rb') as f:      
-
-#         data = pickle.load(f)    
-#         for i in range(12):
-#             # assert data['Y'][i].shape[1] == Y_shape[i]
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- 
 # print(f"## (len(tf.config.experimental.list_physical_devices('GPU'))): {(len(tf.config.experimental.list_physical_devices('GPU')))}")
  
 
@@ -85,10 +56,10 @@ para = AttrDict(
     'grad_norm_clip': 1,
     'lr_min': 1e-4,
 
-    'accum_steps': 8,
-    'batch_size': 16,
+    'accum_steps': 4,
+    'batch_size': 8,
     'horizon': 128,
-    'horizon_val': 128,
+    'horizon_val': 64,
     
 
     'weight_decay': 0.05, # 0.05, 0.004
@@ -97,9 +68,9 @@ para = AttrDict(
     'log_interval': 1,
     'save_interval': 10,
     'validate_interval': 10,
-    'update_interval': 10,
+    'update_interval': 32,
 
-    'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
+    # 'ckpt_load_path': f'ckpt/modelB6-{17400}.h5',
   }
 ) 
 
@@ -426,7 +397,7 @@ def path_loss_fn(path_true, path_pred):
         path_stds = p[:, PATH_DISTANCE:PATH_DISTANCE*2]
         path_valid_len = tf.clip_by_value(p[:, PATH_DISTANCE*2], 5, PATH_DISTANCE)     
 
-        return path, path_stds, path_valid_len * 0.01
+        return path, path_stds, path_valid_len# * 0.01
 
     def loss_fn(y_true, y_pred):
         # y_true, y_pred = standardize(y_true, y_pred)
@@ -456,8 +427,11 @@ def path_loss_fn(path_true, path_pred):
     loss_path = tf.map_fn(lambda x: loss_within_valid_len(x[0], x[1], x[2]), (path_true, path_pred, L), dtype=tf.float32) # (b,)
     loss_std = tf.map_fn(lambda x: loss_within_valid_len(x[0], x[1], x[2]), (path_std_true, path_std_pred, L), dtype=tf.float32) # (b,)
 
+    # print(f'tf.reduce_mean(loss_path): {tf.reduce_mean(loss_path)}, L: {L}')
+    # print(f'tf.reduce_mean(loss_std): {tf.reduce_mean(loss_std)}')
 
-    return tf.reduce_mean(loss_path), tf.reduce_mean(loss_std), loss_fn(path_valid_len_true, path_valid_len_pred)
+
+    return tf.reduce_mean(loss_path) + tf.reduce_mean(loss_std) + loss_fn(path_valid_len_true * 0.01, path_valid_len_pred * 0.01)
 
     # return loss_fn(path_true[:, :l], path_pred[:, :l]) + loss_fn(path_std_true[:, :l], path_std_pred[:, :l]) + \
     #                                 loss_fn(path_valid_len_true, path_valid_len_pred)
@@ -479,7 +453,7 @@ def lane_loss_fn(lane_true, lane_pred, sign):
         # lane_prob = tf.math.sigmoid(l[:, PATH_DISTANCE*2 + 1])
         lane_prob = l[:, PATH_DISTANCE*2 + 1]
 
-        return lane, lane_std, lane_valid_len * 0.01, lane_prob
+        return lane, lane_std, lane_valid_len, lane_prob
 
 
     def loss_fn(y_true, y_pred):
@@ -512,7 +486,7 @@ def lane_loss_fn(lane_true, lane_pred, sign):
     loss_lane = tf.map_fn(lambda x: loss_within_valid_len(x[0], x[1], x[2]), (lane_true, lane_pred, L), dtype=tf.float32) # (b,)
     loss_std = tf.map_fn(lambda x: loss_within_valid_len(x[0], x[1], x[2]), (lane_std_true, lane_std_pred, L), dtype=tf.float32) # (b,)
 
-    return tf.reduce_mean(loss_lane) + tf.reduce_mean(loss_std) + loss_fn(lane_valid_len_true, lane_valid_len_pred) + loss_fn(lane_prob_true, lane_prob_pred)
+    return tf.reduce_mean(loss_lane) + tf.reduce_mean(loss_std) + loss_fn(lane_valid_len_true * 0.01, lane_valid_len_pred * 0.01) + loss_fn(lane_prob_true, lane_prob_pred)
 
     # return loss_fn(lane_true[:, :l], lane_pred[:, :l]) + loss_fn(lane_std_true[:, :l], lane_std_pred[:, :l]) + \
     #         loss_fn(lane_valid_len_true, lane_valid_len_pred) + loss_fn(lane_prob_true, lane_prob_pred)
@@ -634,7 +608,13 @@ def train_loss_fn(y_true, y_pred):
     # for k, v in avg_scales.items():
     #     print(f'{k}: {np.mean(v).round(3)} @ {len(v)}')
 
-
+    # print(f'path_loss: {path_loss}')
+    # print(f'll_loss: {ll_loss}')
+    # print(f'rl_loss: {rl_loss}')
+    # print(f'lead_loss: {lead_loss}')
+    # print(f'longi_x_loss: {longi_x_loss}')
+    # print(f'longi_v_loss: {longi_v_loss}')
+    # print(f'longi_a_loss: {longi_a_loss}') 
     return path_loss + ll_loss + rl_loss + lead_loss + longi_x_loss + longi_v_loss + longi_a_loss
 
     # total_loss = tf.keras.losses.mse(y_true[:, :STATE_IDX], y_pred[:, :STATE_IDX])
@@ -665,75 +645,75 @@ def train_loss_fn(y_true, y_pred):
 
     
 # @tf.function
-def train_step(X_step, Y_step):
+# def train_step(X_step, Y_step):
 
 
-    Y_step = tf.concat(Y_step, axis=-1)
+#     Y_step = tf.concat(Y_step, axis=-1)
     
-    # print(f'type(X_step): {type(X_step)}')
+#     # print(f'type(X_step): {type(X_step)}')
 
-    with tf.GradientTape() as tape:
+#     with tf.GradientTape() as tape:
         
-        Y_pred = model(X_step, training=True) # Y_pred: list. 
+#         Y_pred = model(X_step, training=True) # Y_pred: list. 
 
-        Y_pred = tf.concat(Y_pred, axis=-1)
+#         Y_pred = tf.concat(Y_pred, axis=-1)
 
         
-        loss = train_loss_fn(Y_step, Y_pred)        
-        # loss = tf.reduce_mean(loss)
+#         loss = train_loss_fn(Y_step, Y_pred)        
+#         # loss = tf.reduce_mean(loss)
          
-    grad = tape.gradient(loss, model.trainable_variables)
+#     grad = tape.gradient(loss, model.trainable_variables)
 
     
-    # print(f'Y_pred max: {np.max(Y_pred.numpy())}')
-    # print(f'Y_pred min: {np.min(Y_pred.numpy())}')
+#     # print(f'Y_pred max: {np.max(Y_pred.numpy())}')
+#     # print(f'Y_pred min: {np.min(Y_pred.numpy())}')
 
-    metric = tf.reduce_mean(maxae(Y_step[:, :STATE_IDX], Y_pred[:, :STATE_IDX]))
+#     metric = tf.reduce_mean(maxae(Y_step[:, :STATE_IDX], Y_pred[:, :STATE_IDX]))
    
-    return loss, metric, grad, Y_pred[:, STATE_IDX:]
+#     return loss, metric, grad, Y_pred[:, STATE_IDX:]
 
 
  
 
-def train_batch(X_batch, Y_batch):
+# def train_batch(X_batch, Y_batch):
 
-    accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
-    step_size = para.batch_size // para.accum_steps
+#     accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
+#     step_size = para.batch_size // para.accum_steps
     
-    losses = []
-    metrics = []
+#     losses = []
+#     metrics = []
  
-    rnn_st_batch = np.zeros((para.batch_size, 512))
+#     rnn_st_batch = np.zeros((para.batch_size, 512))
 
-    for step in range(para.accum_steps): 
+#     for step in range(para.accum_steps): 
  
       
-        X_step = [a[step*step_size:(step+1)*step_size] for a in X_batch]
-        Y_step = [a[step*step_size:(step+1)*step_size] for a in Y_batch]
+#         X_step = [a[step*step_size:(step+1)*step_size] for a in X_batch]
+#         Y_step = [a[step*step_size:(step+1)*step_size] for a in Y_batch]
       
        
-        loss, metric, grad, rnn_st_step = train_step(X_step, Y_step)
-         
+#         loss, metric, grad, rnn_st_step = train_step(X_step, Y_step)
+#         # print(f'loss: {loss.numpy()}')
 
-        rnn_st_batch[step*step_size:(step+1)*step_size] = rnn_st_step.numpy()
-        # print(f'rnn_st_step max: {np.max(rnn_st_step.numpy())}')
-        # print(f'rnn_st_step min: {np.min(rnn_st_step.numpy())}')
+#         rnn_st_batch[step*step_size:(step+1)*step_size] = rnn_st_step.numpy()
+#         # print(f'rnn_st_step max: {np.max(rnn_st_step.numpy())}')
+#         # print(f'rnn_st_step min: {np.min(rnn_st_step.numpy())}')
  
 
 
-        for i in range(len(accum_gradients)):          
-            accum_gradients[i] += grad[i]
+#         for i in range(len(accum_gradients)):          
+#             accum_gradients[i] += grad[i]
           
-        losses.append(loss.numpy())
-        metrics.append(metric.numpy())
+#         losses.append(loss.numpy())
+#         metrics.append(metric.numpy())
       
   
 
-    averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
-    # clipped_grads, _ = tf.clip_by_global_norm(averaged_gradients, para.grad_norm_clip)
-    # optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+#     averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
+#     # clipped_grads, _ = tf.clip_by_global_norm(averaged_gradients, para.grad_norm_clip)
+#     # optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
 
-    return np.mean(losses), np.mean(metrics), tf.convert_to_tensor(rnn_st_batch, dtype=tf.float32), averaged_gradients
+#     return np.mean(losses), np.mean(metrics), tf.convert_to_tensor(rnn_st_batch, dtype=tf.float32), averaged_gradients
         
 
 
@@ -767,10 +747,56 @@ val_episodes = gen_episodes_val(val_pkl)
 # with open("log.txt", "w") as f: f.write("")
 # with open("val.txt", "w") as f: f.write("")
 
- 
+
 
 B = para.batch_size
 H = para.horizon
+U = para.update_interval
+
+
+@tf.function
+def train_step(X0_interval, Y_interval, step_size):
+
+
+    X1_step = tf.convert_to_tensor(np.zeros((step_size, 8)), dtype=tf.float32)
+    X2_step = tf.convert_to_tensor(np.zeros((step_size, 2)), dtype=tf.float32)
+    rnn_st_step = tf.convert_to_tensor(np.zeros((step_size, 512)), dtype=tf.float32)
+    
+    loss = 0.0
+    metric = 0.0
+
+    H1 = X0_interval.shape[1]
+
+    with tf.GradientTape() as tape:
+          
+        for t in range(H1): 
+            # if(t >= X0_interval.shape[1]): break
+            
+            # X0_step = tf.convert_to_tensor(X0[step*step_size:(step+1)*step_size, t, ...], dtype=tf.float32)
+            # Y_step = [tf.convert_to_tensor(y[step*step_size:(step+1)*step_size, t, ...], dtype=tf.float32) for y in Y]    
+
+            X0_step = X0_interval[:, t, ...]     
+            Y_step = [y[:, t, ...] for y in Y_interval]    
+            
+            X_step = [X0_step, X1_step, X2_step, rnn_st_step]
+        
+            Y_pred = model(X_step, training=True) # Y_pred: list.  
+            Y_pred = tf.concat(Y_pred, axis=-1) 
+
+            rnn_st_step = Y_pred[:, STATE_IDX:]
+
+            Y_step = tf.concat(Y_step, axis=-1)
+            loss += train_loss_fn(Y_step, Y_pred)    
+            metric += tf.reduce_mean(maxae(Y_step[:, :STATE_IDX], Y_pred[:, :STATE_IDX]))
+
+    loss = loss / H1
+    metric = metric / H1
+    
+
+    grad = tape.gradient(loss, model.trainable_variables)
+
+    return loss, metric, grad
+
 
 update_counts = 0
  
@@ -780,85 +806,60 @@ for eidx, episodes in enumerate(train_episodes): # have ~600 training batches.
 
     losses = []
     metrics = []
-
-    X1_batch = tf.convert_to_tensor(np.zeros((B, 8)), dtype=tf.float32)
-    X2_batch = tf.convert_to_tensor(np.zeros((B, 2)), dtype=tf.float32)
-    rnn_st_batch = tf.convert_to_tensor(np.zeros((B, 512)), dtype=tf.float32)
-
-    progress_bar = tqdm(total=H, desc="executing training episodes...")
-
-
-    accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
-
-    for t in range(H): 
-
-        progress_bar.update(1)
   
-        X0_batch = tf.convert_to_tensor(X0[:, t, ...], dtype=tf.float32)
-        Y_batch = [tf.convert_to_tensor(y[:, t, ...], dtype=tf.float32) for y in Y]
-      
-        X_batch = [X0_batch, X1_batch, X2_batch, rnn_st_batch]
- 
+    n_intervals = H // U
 
+    progress_bar = tqdm(total=n_intervals*para.accum_steps, desc="executing training episodes...")
 
+    for iidx in range(n_intervals):
 
+        accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
+        step_size = para.batch_size // para.accum_steps
 
+        for step in range(para.accum_steps): 
 
-        Y_pred = tf.random.uniform((B, 2383))
-        loss = train_loss_fn(tf.concat(Y_batch, axis=-1), Y_pred)   
-
-        continue
-
-
-
-
-
-    #     loss, metric, rnn_st_batch, grad = train_batch(X_batch, Y_batch)
+            progress_bar.update(1)
      
-    #     for i in range(len(accum_gradients)):          
-    #         accum_gradients[i] += grad[i]
+            X0_interval = tf.convert_to_tensor(X0[step*step_size:(step+1)*step_size, iidx*U:(iidx+1)*U, ...], dtype=tf.float32)
+            Y_interval = [tf.convert_to_tensor(y[step*step_size:(step+1)*step_size, iidx*U:(iidx+1)*U, ...], dtype=tf.float32) for y in Y]
 
-    #     # rnn_st_batch = tf.clip_by_value(rnn_st_batch, -1000, 1000)     
-    #     print(f'tf.math.reduce_max(rnn_st_batch): {tf.math.reduce_max(rnn_st_batch)}')
-    #     print(f'tf.math.reduce_min(rnn_st_batch): {tf.math.reduce_min(rnn_st_batch)}')
+            loss, metric, grad = train_step(X0_interval, Y_interval, step_size)
+ 
+            for i in range(len(accum_gradients)):          
+                accum_gradients[i] += grad[i]
 
-    #     losses.append(loss) 
-    #     metrics.append(metric) 
+            
+            losses.append(loss.numpy())
+            metrics.append(metric.numpy())
 
-    #     update_counts += 1
-    #     lr_next = lr_scheduler(update_counts)
-    #     tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
+        averaged_gradients = [accum_grad / tf.cast(para.accum_steps, tf.float32) for accum_grad in accum_gradients]
+        optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+    
+        update_counts += 1
+        lr_next = lr_scheduler(update_counts)
+        tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
+    
+ 
+    del X0, Y 
 
-    #     if(t%para.update_interval==0):
-
-    #         averaged_gradients = [accum_grad / tf.cast(para.update_interval, tf.float32) for accum_grad in accum_gradients]
-
-    #         optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
-
-    #         accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
+    if (eidx+1) % para.log_interval == 0:
+        log = f'[{eidx+1}] train loss: {np.mean(losses)}' + \
+                      f', train metric: {np.mean(metrics)}' + f', lr: {lr_next}' 
+        print(log)
+        with open("log.txt", "a") as f: f.write(log + '\n')
 
 
-    # del X0, Y 
-
-    # if eidx % para.log_interval == 0:
-    #     log = f'[{eidx}] train loss: {np.mean(losses)}' + \
-    #                   f', train metric: {np.mean(metrics)}' + f', lr: {lr_next}' 
-    #     print(log)
-    #     with open("log.txt", "a") as f: f.write(log + '\n')
-
+    if (eidx+1) % para.validate_interval == 0:
+        print(f'validating...') 
+        loss, metric = validate()
+        log = f'[{eidx+1}] val loss: {loss}, val metric: {metric}'
+        print(log)
+        with open("val.txt", "a") as f: f.write(log + '\n')                
     
 
-    # if eidx % para.validate_interval == 0:
-    #     print(f'validating...') 
-    #     loss, metric = validate()
-    #     log = f'[{update_counts}] val loss: {loss}, val metric: {metric}'
-    #     print(log)
-    #     with open("val.txt", "a") as f: f.write(log + '\n')                
-    
-
-    # if eidx % para.save_interval == 0:
-    #     model.save_weights(f'ckpt/modelB6-{eidx}.h5')
-    #     print(f'[{eidx}] saved ckpt: ckpt/modelB6-{eidx}.h5')
+    if (eidx+1) % para.save_interval == 0:
+        model.save_weights(f'ckpt/modelB6-{eidx+1}.h5')
+        print(f'[{eidx+1}] saved ckpt: ckpt/modelB6-{eidx+1}.h5')
 
   
 

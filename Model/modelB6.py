@@ -382,7 +382,7 @@ def get_model():
             'downsamples': [True, True, True, True]
         })
       )
-  # fastvit.load_ckpt('ckpt', 'acc0p96.pkl')  
+  fastvit.load_ckpt('ckpt', 'acc0p96.pkl')  
   x_to_RNNfk2fk3= fastvit(img)
 
 

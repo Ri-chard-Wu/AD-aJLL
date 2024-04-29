@@ -1116,24 +1116,24 @@ class FastViT(tf.keras.Model):
 
 
 
-        # def yuv2rgb_seq():
+        def yuv2rgb_seq():
 
-        #     seq = []            
-        #     seq.append(tf.keras.layers.ZeroPadding2D(padding=(64, 0)))
-        #     # seq.append(
-        #     #         tf.keras.layers.Conv2D(
-        #     #                         filters=3,
-        #     #                         kernel_size=3,
-        #     #                         strides=1,
-        #     #                         padding='same',
-        #     #                         use_bias=True,
-        #     #                         name='conv'
-        #     #                     )
-        #     #     )    
-        #     return seq
+            seq = []            
+            seq.append(tf.keras.layers.ZeroPadding2D(padding=(64, 0)))
+            seq.append(
+                    tf.keras.layers.Conv2D(
+                                    filters=3,
+                                    kernel_size=3,
+                                    strides=1,
+                                    padding='same',
+                                    use_bias=True,
+                                    name='conv'
+                                )
+                )    
+            return seq
 
-        # # (b, 128, 256, 12) -> (b, 256, 256, 3)
-        # self.yuv2rgb = ModuleList('yuv2rgb', yuv2rgb_seq)
+        # (b, 128, 256, 12) -> (b, 256, 256, 3)
+        self.yuv2rgb = ModuleList('yuv2rgb', yuv2rgb_seq)
 
 
 
@@ -1263,17 +1263,19 @@ class FastViT(tf.keras.Model):
         count = 0
         for i, w in enumerate(self.weights):
             
-            if('yuv2rgb' in w.name): 
+            key = w.name.replace('fastvit/', '')
+
+            if('yuv2rgb' in key): 
                 # print(f'w.name: {w.name}')
                 continue
 
             # weights[w.name] = w
             # print(f'w.name: {w.name}')
             # exit()
-            assert w.name in weights, w.name
+            assert key in weights, key
 
-            w.assign(weights[w.name])
-            del weights[w.name]
+            w.assign(weights[key])
+            del weights[key]
             count += 1
             # print(f'[{i}] type(weights[w.name]): {type(weights[w.name])}, w.name: {w.name}, weights[w.name].shape: {weights[w.name].shape}')
 
@@ -1286,7 +1288,8 @@ class FastViT(tf.keras.Model):
     def call(self, x, training=True):
 
         
-        x = self.yuv_pad(x)
+        # x = self.yuv_pad(x)
+        x = self.yuv2rgb(x)
 
 
         # print(f'x.shape: {x.shape}')
