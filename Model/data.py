@@ -44,92 +44,102 @@ Y_shape = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
  
 def plot_outs(outs, frame, dir_name, file_name):
 
-    frame = frame.astype(np.uint8)
+    try:
 
-    # print(f'np.mean(frame): {np.mean(frame)}')
-    # exit()
-    if(not os.path.exists(dir_name)):
-        os.mkdir(dir_name)
+        frame = frame.astype(np.uint8)
 
-    PATH_DISTANCE = 192
-    x_lspace = np.linspace(1, PATH_DISTANCE, PATH_DISTANCE)  
+        # print(f'np.mean(frame): {np.mean(frame)}')
+        # exit()
+        if(not os.path.exists(dir_name)):
+            # os.mkdir(dir_name)
+            os.makedirs(dir_name, exist_ok=True)
+
+        PATH_DISTANCE = 192
+        x_lspace = np.linspace(1, PATH_DISTANCE, PATH_DISTANCE)  
+        
+        # outs = [a.numpy() for a in outs]
     
-    # outs = [a.numpy() for a in outs]
-  
-    parsed = parser(outs)
+        parsed = parser(outs)
+        
+        #--- len(parsed) = 25
+        #[print("#--- parsed[", x, "].shape =", parsed[x].shape) for x in parsed]   # see output.txt
+        
+        # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)   # cv2 reads images in BGR format (instead of RGB)
+
+        plt.clf()   # clear figure
+        plt.xlim(0, 1200)
+        plt.ylim(800, 0)
+
+
+
+        # -----------------------
+
+        plt.subplot(221)   # 221: 2 rows, 2 columns, 1st sub-figure
+
+        
+        # print(f"parsed['path_valid_len']: {parsed['path_valid_len']}")
+
+        l = int(parsed['path_valid_len'])   
+        
+        # print(f"parsed['path'][0][:l]: {parsed['path'][0][:l]}") 
+
+        plt.imshow(draw_path(frame.copy(), parsed["path"][0][:l], x_lspace[:l]))
+
+        # plt.imshow(frame)
+
+        # new_x_path, new_y_path = transform_points(x_lspace[:l], parsed["path"][0][:l]) 
+        # plt.plot(new_x_path, new_y_path, color='g')
+
+
+
+        plt.title(f"Overlay (truncated) l: {l}")
+
+
+        L_ll = int(parsed['lll_valid_len']) 
+        new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0]) 
+
+        L_rl = int(parsed['rll_valid_len']) 
+        new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
+
+        plt.plot(new_x_left[:L_ll], new_y_left[:L_ll], label='transformed', color='r')    
+        plt.plot(new_x_right[:L_rl], new_y_right[:L_rl], label='transformed', color='r')
+
+        # print(f"parsed['lead_xyva'][0].shape: {parsed['lead_xyva'][0].shape}")
+        x, y, v, a = parsed['lead_xyva'][0]
+        x, y = transform_point(x, y) 
+        plt.plot([x], [y],  marker='^', color='y', markersize=10)
     
-      #--- len(parsed) = 25
-      #[print("#--- parsed[", x, "].shape =", parsed[x].shape) for x in parsed]   # see output.txt
-    
-    # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)   # cv2 reads images in BGR format (instead of RGB)
+        # -----------------------
 
-    plt.clf()   # clear figure
-    plt.xlim(0, 1200)
-    plt.ylim(800, 0)
-
-    # -----------------------
-
-    plt.subplot(221)   # 221: 2 rows, 2 columns, 1st sub-figure
-
-    
-    # print(f"parsed['path_valid_len']: {parsed['path_valid_len']}")
-
-    l = int(parsed['path_valid_len'])   
-    
-    # print(f"parsed['path'][0][:l]: {parsed['path'][0][:l]}") 
-
-    plt.imshow(draw_path(frame.copy(), parsed["path"][0][:l], x_lspace[:l]))
-
-    # plt.imshow(frame)
-
-    # new_x_path, new_y_path = transform_points(x_lspace[:l], parsed["path"][0][:l]) 
-    # plt.plot(new_x_path, new_y_path, color='g')
-
-
-
-    plt.title(f"Overlay (truncated) l: {l}")
-
-
-    L_ll = int(parsed['lll_valid_len']) 
-    new_x_left, new_y_left = transform_points(x_lspace, parsed["lll"][0]) 
-
-    L_rl = int(parsed['rll_valid_len']) 
-    new_x_right, new_y_right = transform_points(x_lspace, parsed["rll"][0])
-
-    plt.plot(new_x_left[:L_ll], new_y_left[:L_ll], label='transformed', color='r')    
-    plt.plot(new_x_right[:L_rl], new_y_right[:L_rl], label='transformed', color='r')
-
-
-    # -----------------------
-
-    plt.subplot(222)   # 221: 2 rows, 2 columns, 1st sub-figure
-    plt.title(f"Overlay (no truncate)")
-    
-    plt.imshow(draw_path(frame.copy(), parsed["path"][0], x_lspace))
-    plt.plot(new_x_left, new_y_left, color='r')    
-    plt.plot(new_x_right, new_y_right, color='r')
- 
-
-    # -----------------------
-
-    plt.subplot(223)
-    plt.title("Original Scene")
-    plt.imshow(frame)
-    # -----------------------
-
-    plt.subplot(224)
-    plt.gca().invert_xaxis()
-
-      # Needed to invert axis because standard left lane is positive and right lane is negative, so we flip the x axis
-    plt.title("Top-Down View (truncated)")
-    plt.plot(parsed["lll"][0][:L_ll], range(0, L_ll), "r-", linewidth=1)
-    plt.plot(parsed["path"][0][:l], range(0, l), "g-", linewidth=1)
-    plt.plot(parsed["rll"][0][:L_rl], range(0, L_rl), "b-", linewidth=1)
-
-    plt.tight_layout()
-    plt.savefig(dir_name + '/' + file_name)  
+        plt.subplot(222)   # 221: 2 rows, 2 columns, 1st sub-figure
+        plt.title(f"Overlay (no truncate)")
+        
+        plt.imshow(draw_path(frame.copy(), parsed["path"][0], x_lspace))
+        plt.plot(new_x_left, new_y_left, color='r')    
+        plt.plot(new_x_right, new_y_right, color='r')
     
 
+        # -----------------------
+
+        plt.subplot(223)
+        plt.title("Original Scene")
+        plt.imshow(frame)
+        # -----------------------
+
+        plt.subplot(224)
+        plt.gca().invert_xaxis()
+
+        # Needed to invert axis because standard left lane is positive and right lane is negative, so we flip the x axis
+        plt.title("Top-Down View (truncated)")
+        plt.plot(parsed["lll"][0][:L_ll], range(0, L_ll), "r-", linewidth=1)
+        plt.plot(parsed["path"][0][:l], range(0, l), "g-", linewidth=1)
+        plt.plot(parsed["rll"][0][:L_rl], range(0, L_rl), "b-", linewidth=1)
+
+        plt.tight_layout()
+        plt.savefig(dir_name + '/' + file_name)  
+        
+    except:
+        pass
 
 
  
