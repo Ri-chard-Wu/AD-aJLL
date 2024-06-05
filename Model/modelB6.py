@@ -379,7 +379,9 @@ def get_model():
   x_to_RNNfk2fk3= fastvit(img) 
 
   out11 = RNN(x_to_RNNfk2fk3, in1, in2, in3)
+
   out0, out1, out2, out3, out4, out5, out6, out7 = fork1(out11)
+  
   out8, out9 = fork2(x_to_RNNfk2fk3)
   out10      = fork3(x_to_RNNfk2fk3)
 
