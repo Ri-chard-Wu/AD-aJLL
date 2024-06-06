@@ -49,7 +49,6 @@ class AttrDict(dict):
  
 para = AttrDict(
   {
-
     'total_steps': 1000,
     'base_lr': 1e-3,
     'decay_type': 'cosine',
@@ -123,7 +122,6 @@ def gen_episodes_train(pkl_files):
     
                 progress_bar = tqdm(total=B, desc="sampleing training data...")
                 
-     
                 
                 for fidx in range(B):
                     

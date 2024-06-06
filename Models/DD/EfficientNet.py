@@ -193,19 +193,20 @@ def EfficientNet(width_coefficient,
                  include_top=True,
                  weights='imagenet',
                  input_tensor=None,
-                 input_shape=None,
+                 input_shape=None, # (12, 128, 256).
                  pooling=None,
                  classes=1000,
                  **kwargs # no.
                  ):
   
-    img_input = tf.keras.Input(shape=input_shape)
- 
+    img_input = tf.keras.Input(shape=input_shape)    
+    img = layers.Permute((2, 3, 1))(img_input) # (b, 128, 256, 12).
+
     bn_axis = 3 if tf.keras.backend.image_data_format() == 'channels_last' else 1
     activation = get_swish()
 
     # Build stem
-    x = img_input
+    x = img
     x = tf.keras.layers.Conv2D(round_filters(32, width_coefficient, depth_divisor), 3,
                       strides=(2, 2),
                       padding='same',
@@ -283,7 +284,7 @@ def EfficientNet(width_coefficient,
 def EfficientNetB2(include_top=True,
                 weights='imagenet',
                 input_tensor=None,
-                input_shape=(128, 256, 6),
+                input_shape=(12, 128, 256),
                 pooling=None,
                 classes=1000,
                 **kwargs):
