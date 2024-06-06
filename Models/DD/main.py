@@ -179,9 +179,9 @@ def main(rank, world_size, args):
                 # inputs: (b, 6, H, W), 2 rgb, not yuv.
                 pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
                 
-                cls_loss, reg_loss = loss(pred_cls, pred_trajectory, labels) # (,)?, (3,).
+                cls_loss, reg_loss = loss(pred_cls, pred_trajectory, labels) # (,), (,).
 
-                total_loss += (cls_loss + args.mtp_alpha * reg_loss.mean()) / model.module.optimize_per_n_step
+                total_loss += (cls_loss + args.mtp_alpha * reg_loss) / model.module.optimize_per_n_step
             
                
                 if (t + 1) % model.module.optimize_per_n_step == 0:
