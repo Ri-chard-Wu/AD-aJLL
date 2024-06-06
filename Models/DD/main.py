@@ -55,20 +55,27 @@ class AttrDict(dict):
 
 args = AttrDict({
         'M': 5, 
-        'batch_size': 2, 
+        'batch_size': 1, 
+        'accum_batchs': 8,        
         'epochs': 100000,  
         'log_per_n_step': 20, 
         'lr': 0.0001, 
         'mtp_alpha': 1.0, 
         'n_workers': 4, 
         'num_pts': 33, 
-        'optimize_per_n_step': 8, 
+        'optimize_per_n_step': 32, 
         'optimizer': 'sgd', 
         'resume': '', 
         'sync_bn': True, 
         'tqdm': False, 
         'val_per_n_epoch': 1,
-        'horizon': 512,
+        'horizon': 128,
+
+        'ckpt': [None, f'ckpt/DD-0.h5'][0],
+        
+        'save_interval': 4,
+        'log_interval': 8,
+
     }) 
 
 
@@ -209,6 +216,145 @@ def get_train_dataloader(pkl_files):
 
   
 
+
+
+
+
+def get_val_dataloader(pkl_files):
+  
+    hevc_files = [pkl_file.replace('data.pkl', 'fcamera.hevc') for pkl_file in pkl_files]    
+
+    H = para.horizon_val
+  
+    while(1):
+
+        idx = np.random.choice(np.arange(len(pkl_files)), size=1)[0]
+        pkl_file = pkl_files[idx]
+        hevc_file = hevc_files[idx]
+
+        RGBs = np.zeros((1, H, 874, 1164, 3), dtype=np.uint8) # for debug.
+        X0 = np.zeros((1, H, 12, 128, 256), dtype=np.uint8)   
+        X3 = np.zeros((1, H, 512), dtype=np.float32)             
+        Y = [np.zeros((1, H, s)) for s in Y_shape]
+     
+        frames = read_frames(hevc_file) 
+        
+        if(len(frames)-H <= 0): 
+            print(f'[Warning] len(frames)-H <= 0): {hevc_file}')
+            continue
+
+        t0 = np.random.choice(np.arange(len(frames)-H), size=1)[0]
+ 
+        frames = frames[t0:t0+H+1]
+ 
+        with open(pkl_file, 'rb') as f:      
+
+            data = pickle.load(f)    
+            assert data['Xin3'].shape[1] == 512
+            for i in range(12):
+                assert data['Y'][i].shape[1] == Y_shape[i]
+
+        for t in range(H):   
+
+            RGBs[0, t] = cv2.cvtColor(frames[t], cv2.COLOR_BGR2RGB)
+
+            X3[0, t] = data['Xin3'][t0+t]
+            X0[0, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
+
+            for j in range(12):
+                Y[j][0, t] = data['Y'][j][t0+t]
+
+
+        yield X0, Y[0], RGBs
+
+        del X0, X3, Y, RGBs
+
+ 
+
+
+def validate(n=3):
+        
+    H = para.horizon_val
+ 
+    losses_ar = []
+    losses_spv = []
+    metrics_ar = []
+    metrics_spv = []
+        
+    for i, data in tqdm(enumerate(val_dataloader)):
+
+        if i >= n: break
+
+        seq_inputs, seq_labels, RGBs = data
+ 
+
+        X1_batch = tf.convert_to_tensor(np.zeros((1, 8)), dtype=tf.float32)
+        X2_batch = tf.convert_to_tensor(np.zeros((1, 2)), dtype=tf.float32)
+        rnn_st_batch = tf.convert_to_tensor(np.zeros((1, 512)), dtype=tf.float32)
+
+        progress_bar = tqdm(total=H, desc=f"executing val episodes {i+1} / {n}...")
+          
+        bs = 1
+        hidden = (tf.zeros((bs, 512)), tf.zeros((bs, 512)))
+
+        try:
+            for t in range(H):
+    
+                progress_bar.update(1)        
+                
+                inputs = seq_inputs[:, t, :, :, :] # (b, 12, 128, 256).
+                labels = seq_labels[:, t, :] # (b, 2*num_pts+1).
+
+                inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) 
+                labels = tf.convert_to_tensor(labels, dtype=tf.float32) 
+                                 
+                pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
+
+
+                if(t%5==0):
+                    frame = RGBs[0, t]
+
+                                                                                        
+                    plot_outs([y.numpy() for y in Y_batch], frame, dir_name=f'output/val/{i}/true', file_name=f'{t}.png')
+                    plot_outs([y.numpy() for y in Y_pred_spv_batch], frame, dir_name=f'output/val/{i}/pred-spv', file_name=f'{t}.png')   
+                    plot_outs([y.numpy() for y in Y_pred_ar_batch], frame, dir_name=f'output/val/{i}/pred-ar', file_name=f'{t}.png')                             
+                 
+
+
+
+                Y_pred_spv_batch = tf.concat(Y_pred_spv_batch, axis=-1)
+                Y_pred_ar_batch = tf.concat(Y_pred_ar_batch, axis=-1)
+                Y_batch = tf.concat(Y_batch, axis=-1)
+    
+                rnn_st_batch = Y_pred_ar_batch[:, STATE_IDX:]
+                
+                loss_spv = train_loss_fn(Y_batch, Y_pred_spv_batch)
+                loss_ar = train_loss_fn(Y_batch[:, :STATE_IDX], Y_pred_ar_batch[:, :STATE_IDX])
+
+                metric_spv = tf.reduce_mean(maxae(Y_batch, Y_pred_spv_batch))
+                metric_ar = tf.reduce_mean(maxae(Y_batch[:, :STATE_IDX], Y_pred_ar_batch[:, :STATE_IDX]))
+
+            
+                losses_ar.append(loss_ar.numpy())
+                losses_spv.append(loss_spv.numpy())
+                
+                metrics_ar.append(metric_ar.numpy())
+                metrics_spv.append(metric_spv.numpy())
+
+
+            del X0, X3, Y, RGBs
+        
+        except:
+            pass
+
+    return np.mean(losses_ar), np.mean(losses_spv), np.mean(metrics_ar), np.mean(metrics_spv)
+
+
+
+
+
+
+
 def main():
  
   
@@ -216,7 +362,12 @@ def main():
     #             args.lr, args.optimizer, args.optimize_per_n_step) 
     
     model = SequencePlanningNetwork(args.M, args.num_pts)
-
+    model(tf.random.uniform((1, 12, 128, 256)), (tf.zeros((1, 512)), tf.zeros((1, 512))))
+    if args.ckpt: 
+        model.load_weights(args.ckpt)  # for retraining
+        print(f'loaded ckpt: {args.ckpt}')
+    
+    
     # optimizer, lr_scheduler = model.configure_optimizers(args, model)
  
     optimizer = tf.keras.optimizers.SGD(learning_rate=args.lr,
@@ -234,22 +385,31 @@ def main():
     all_pkl = glob.glob("/home/richard/Downloads/TData1/*.pkl") 
     split = int(len(all_pkl) * 0.85)
     train_pkl = all_pkl[:split]
+    val_pkl = all_pkl[split:]
+
     train_dataloader = get_train_dataloader(train_pkl)
+    val_dataloader = get_val_dataloader(val_pkl)
 
 
+    bs = args.batch_size
+    seq_length = args.horizon
+    H1 = args.optimize_per_n_step
+    n1 = seq_length//H1
+    
+    
     for epoch in range(args.epochs):
  
+        accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n1)]
+
         for epid, data in enumerate(train_dataloader):  
     
             seq_inputs, seq_labels = data # (b, T, 12, 128, 256), (b, T, 2*num_pts+1). 
-
-            bs = seq_labels.shape[0]
-            seq_length = seq_labels.shape[1]
             
             hidden = (tf.zeros((bs, 512)), tf.zeros((bs, 512)))
  
-            H1 = args.optimize_per_n_step
-            n1 = seq_length//H1
+
+            losses = [] 
+
             for t1 in range(n1):
                 
                 loss = 0
@@ -258,10 +418,10 @@ def main():
 
                     for t in range(t1*H1, (t1+1)*H1):
                         if((t1+1)*H1 > seq_length): break
-
-                        inputs, labels = seq_inputs[:, t, :, :, :], \
-                                seq_labels[:, t, :] # (b, 12, 128, 256), (b, 2*num_pts+1).
-
+                    
+                        inputs = seq_inputs[:, t, :, :, :] # (b, 12, 128, 256).
+                        labels = seq_labels[:, t, :] # (b, 2*num_pts+1).
+                        
                         inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) 
                         labels = tf.convert_to_tensor(labels, dtype=tf.float32) 
 
@@ -271,72 +431,47 @@ def main():
 
                         loss += (cls_loss + args.mtp_alpha * reg_loss) / H1 # "/H1" may cause error.
 
-                print(f'[{epoch}-{epid}-{t1}] loss: {loss}')
+                # print(f'[{epoch}-{epid}-{t1}] loss: {loss}')
                 
                 grad = tape.gradient(loss, model.trainable_variables)
-                optimizer.apply_gradients(zip(grad, model.trainable_variables))
 
+                for i in range(len(accum_gradients[t1])):
+                    accum_gradients[t1][i] += grad[i]
+                
+ 
+
+                # optimizer.apply_gradients(zip(grad, model.trainable_variables))
+                losses.append(loss.numpy())
                 
                 hidden = [tf.convert_to_tensor(hidden[0].numpy(), dtype=tf.float32),
                           tf.convert_to_tensor(hidden[1].numpy(), dtype=tf.float32)]
+ 
+ 
+                if t1 % args.log_interval == 0:
+                    log = f'[{epoch}-{epid}-{t1}] loss: {np.mean(losses)}'
+                    print(log)
+                    with open("train.txt", "a") as f: f.write(log + '\n')
+                    losses = []
+ 
+            if epid % args.accum_batchs == 0:
+                for t1 in range(n1): 
+                    averaged_gradients = [accum_grad / tf.cast(args.accum_batchs, tf.float32) for accum_grad in accum_gradients[t1]]
+                    optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+
+                accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n1)]
+
+
+            if epid % args.save_interval == 0:
+                model.save_weights(f'ckpt/DD-{epid}.h5')
+                print(f'saved ckpt: ckpt/DD-{epid}.h5')
+
+ 
 
         # lr_scheduler.step()
 
 
 
-
-    ##################
-
-    # for epoch in range(args.epochs):
-
-    #     train_dataloader.sampler.set_epoch(epoch)
-        
-    #     for batch_idx, data in enumerate(train_dataloader):
-
-    #         # seq_inputs: (b, N+1, 6, H, W), 2 rgb, not yuv.
-    #         seq_inputs, seq_labels = data['seq_input_img'].cuda(),\
-    #                              data['seq_future_poses'].cuda() # (b, N+1, 6, h, w), (b, N, num_pts, 3).
-            
-    #         bs = seq_labels.shape[0]
-    #         seq_length = seq_labels.shape[1]
-            
-    #         hidden = (tf.zeros((bs, 512)), tf.zeros((bs, 512)))
-
-    #         total_loss = 0
-
-    #         for t in range(seq_length):
-                
-    #             num_steps += 1
-
-    #             inputs, labels = seq_inputs[:, t, :, :, :], \
-    #                     seq_labels[:, t, :, :] # (b, 6, h, w), (b, num_pts, 3).
-                
-    #             # inputs: (b, 6, H, W), 2 rgb, not yuv.
-    #             pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
-                
-    #             cls_loss, reg_loss = loss(pred_cls, pred_trajectory, labels) # (,), (,).
-
-    #             total_loss += (cls_loss + args.mtp_alpha * reg_loss) / model.module.optimize_per_n_step
-            
-               
-    #             if (t + 1) % model.module.optimize_per_n_step == 0:
-    #                 hidden = hidden.clone().detach()
-    #                 optimizer.zero_grad()
-    #                 total_loss.backward()
-    #                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # TODO: move to args
-    #                 optimizer.step() 
-    #                 total_loss = 0
  
-
-    #         if not isinstance(total_loss, int):
-    #             optimizer.zero_grad()
-    #             total_loss.backward()
-    #             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # TODO: move to args
-    #             optimizer.step()
- 
-
-
-    #     lr_scheduler.step()
 
     #     if (epoch + 1) % args.val_per_n_epoch == 0:
 
