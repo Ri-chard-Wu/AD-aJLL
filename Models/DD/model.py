@@ -5,8 +5,7 @@ from EfficientNet import EfficientNetB2
 
  
 
-
-#
+ 
 
 class SequencePlanningNetwork(tf.keras.Model):
     def __init__(self, M, num_pts):
