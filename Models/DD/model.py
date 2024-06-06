@@ -116,31 +116,13 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         L = tf.cast(valid_len_gt, dtype=tf.int32) # (b,).
 
         path_pred = pred_traj[:, :, :self.num_pts] # (b, 5, num_pts).
-        valid_len_pred = tf.clip_by_value(pred_traj[:, :, 2*self.num_pts], 5, 192) # (b, 5).
+        valid_len_pred = tf.clip_by_value(pred_traj[:, :, 2*self.num_pts], 5, 192-1) # (b, 5).
+
+        
 
         b = pred_cls_prob.shape[0]
         M = self.M
 
-
-        # with torch.no_grad():
-            
-        #     # pred_end_positions = pred_traj[:, :, self.num_pts-1, :]  # (b, M, 3).
-        #     sel = tf.stack([tf.repeat(tf.range(b), repeats=M, axis=0),
-        #                     tf.convert_to_tensor(list(range(M))*b, dtype=tf.int32), 
-        #                     tf.repeat(L, repeats=M, axis=0)], 
-        #                 axis=1)   
-        #     pred_end_positions = tf.reshape(tf.gather_nd(path_pred, sel), (b, M)) # (b, 5).
-
-        #     # gt_end_positions = gt[:, self.num_pts-1:, :].expand(-1, self.M, -1)  # (b, M, 3).
-        #     sel = tf.stack([tf.range(b), L], axis=1)  
-        #     gt_end_positions = tf.gather_nd(path_gt, sel)[:, None] # (b, 1).
-
-          
-
-        #     distances = (pred_end_positions - gt_end_positions) ** 2 # (b, 5).
-
-        #     # index = distances.argmin(dim=1)  # (b,).
-        #     gt_cls = tf.argmin(distances, axis=1) # (b,).
 
         nograd_path_pred = tf.stop_gradient(path_pred)
         nograd_path_gt = tf.stop_gradient(path_gt)
@@ -164,8 +146,11 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
 
         # pred_traj = pred_traj[torch.tensor(range(len(gt_cls)),\
         #                          device=gt_cls.device), index, ...]  # (b, num_pts, 3).
-        sel = tf.stack([tf.range(b), gt_cls], axis=1) 
+        sel = tf.stack([tf.range(b), gt_cls], axis=1) # (b, 2).
         path_pred = tf.gather_nd(path_pred, sel) # (b, num_pts).
+
+        valid_len_pred = tf.gather_nd(valid_len_pred, sel) # (b,).
+        valid_len_loss = self.reg_loss(valid_len_gt, valid_len_pred) # (b,).
 
         gt_cls_onehot = tf.one_hot(gt_cls, M) # (b, 5).
         cls_loss = self.cls_loss(gt_cls_onehot, pred_cls_prob) # (b,).

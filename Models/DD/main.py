@@ -5,6 +5,8 @@ import random
 from tqdm import tqdm
 from argparse import ArgumentParser
 
+import matplotlib.pyplot as plt
+ 
 import numpy as np
 import tensorflow as tf
 
@@ -15,7 +17,7 @@ import cv2
 import glob
 
 import pickle
-from cameraB3 import transform_img, eon_intrinsics, medmodel_intrinsics
+from cameraB3 import transform_img, eon_intrinsics, medmodel_intrinsics, draw_path
 
 PATH_DISTANCE = 192
 LANE_OFFSET = 1.8
@@ -70,11 +72,13 @@ args = AttrDict({
         'tqdm': False, 
         'val_per_n_epoch': 1,
         'horizon': 128,
+        'horizon_val': 128,
 
-        'ckpt': [None, f'ckpt/DD-0.h5'][0],
+        'ckpt': [None, f'ckpt/DD-160.h5'][0],
         
-        'save_interval': 4,
+        'save_interval': 20,
         'log_interval': 8,
+        'val_interval': 8
 
     }) 
 
@@ -162,12 +166,12 @@ def get_train_dataloader(pkl_files):
                 X3 = np.zeros((B, H, 512), dtype=np.float32)    
                 Y = [np.zeros((B, H, s)) for s in Y_shape]
     
-                progress_bar = tqdm(total=B, desc="sampleing training data...")
+                # progress_bar = tqdm(total=B, desc="sampleing training data...")
                 
                 
                 for fidx in range(B):
                     
-                    progress_bar.update(1)
+                    # progress_bar.update(1)
 
 
                     while(1):
@@ -183,9 +187,6 @@ def get_train_dataloader(pkl_files):
                         else:
                             print(f'[Warning] len(frames)-H <= 0): {hevc_file}')                        
                             continue
-
-
-                    
                     
                     t0 = np.random.choice(np.arange(len(frames)-H), size=1)[0]
                     frames = frames[t0:t0+H+1]
@@ -224,7 +225,7 @@ def get_val_dataloader(pkl_files):
   
     hevc_files = [pkl_file.replace('data.pkl', 'fcamera.hevc') for pkl_file in pkl_files]    
 
-    H = para.horizon_val
+    H = args.horizon_val
   
     while(1):
 
@@ -272,14 +273,69 @@ def get_val_dataloader(pkl_files):
  
 
 
-def validate(n=3):
-        
-    H = para.horizon_val
+
+
+
+
+
  
-    losses_ar = []
-    losses_spv = []
-    metrics_ar = []
-    metrics_spv = []
+def plot_outs(traj_true, # (2*num_pts+1,).
+            traj_pred, # (2*num_pts+1,).
+             frame, 
+             dir_name, 
+             file_name):
+
+    frame = frame.astype(np.uint8)
+ 
+     
+    if(not os.path.exists(dir_name)):
+        os.makedirs(dir_name, exist_ok=True)
+
+    PATH_DISTANCE = 192
+    x_lspace = np.linspace(1, PATH_DISTANCE, PATH_DISTANCE)  
+    
+    path_true = traj_true[:PATH_DISTANCE]
+    path_std_true = traj_true[PATH_DISTANCE:2*PATH_DISTANCE]
+    valid_len_true = np.fmin(PATH_DISTANCE, np.fmax(5, traj_true[2*PATH_DISTANCE]))
+ 
+    path_pred = traj_pred[:PATH_DISTANCE]
+    path_std_pred = traj_pred[PATH_DISTANCE:2*PATH_DISTANCE]
+    valid_len_pred = np.fmin(PATH_DISTANCE, np.fmax(5, traj_pred[2*PATH_DISTANCE]))
+
+
+
+    plt.clf()   # clear figure
+    plt.xlim(0, 1200)
+    plt.ylim(800, 0)
+
+    # ----------------------- 
+    plt.subplot(221) # 221: 2 rows, 2 columns, 1st sub-figure 
+    l = int(valid_len_true)    
+    plt.imshow(draw_path(frame.copy(), path_true[:l], x_lspace[:l])) 
+    plt.title(f"true, l: {l}")
+
+    # ----------------------- 
+    plt.subplot(222)   
+    l = int(valid_len_pred)    
+    plt.imshow(draw_path(frame.copy(), path_pred[:l], x_lspace[:l]))  
+    plt.title(f"pred, l: {l}")
+
+    # ----------------------- 
+
+    plt.tight_layout()
+    plt.savefig(dir_name + '/' + file_name)  
+
+
+
+ 
+
+
+def validate(n=3):
+
+    print('validating ...')
+        
+    H = args.horizon_val
+  
         
     for i, data in tqdm(enumerate(val_dataloader)):
 
@@ -287,256 +343,164 @@ def validate(n=3):
 
         seq_inputs, seq_labels, RGBs = data
  
-
-        X1_batch = tf.convert_to_tensor(np.zeros((1, 8)), dtype=tf.float32)
-        X2_batch = tf.convert_to_tensor(np.zeros((1, 2)), dtype=tf.float32)
-        rnn_st_batch = tf.convert_to_tensor(np.zeros((1, 512)), dtype=tf.float32)
-
-        progress_bar = tqdm(total=H, desc=f"executing val episodes {i+1} / {n}...")
+        # progress_bar = tqdm(total=H, desc=f"executing val episodes {i+1} / {n}...")
           
         bs = 1
         hidden = (tf.zeros((bs, 512)), tf.zeros((bs, 512)))
 
-        try:
-            for t in range(H):
     
-                progress_bar.update(1)        
-                
-                inputs = seq_inputs[:, t, :, :, :] # (b, 12, 128, 256).
-                labels = seq_labels[:, t, :] # (b, 2*num_pts+1).
+        for t in range(H):
 
-                inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) 
-                labels = tf.convert_to_tensor(labels, dtype=tf.float32) 
-                                 
-                pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
-
-
-                if(t%5==0):
-                    frame = RGBs[0, t]
-
-                                                                                        
-                    plot_outs([y.numpy() for y in Y_batch], frame, dir_name=f'output/val/{i}/true', file_name=f'{t}.png')
-                    plot_outs([y.numpy() for y in Y_pred_spv_batch], frame, dir_name=f'output/val/{i}/pred-spv', file_name=f'{t}.png')   
-                    plot_outs([y.numpy() for y in Y_pred_ar_batch], frame, dir_name=f'output/val/{i}/pred-ar', file_name=f'{t}.png')                             
-                 
-
-
-
-                Y_pred_spv_batch = tf.concat(Y_pred_spv_batch, axis=-1)
-                Y_pred_ar_batch = tf.concat(Y_pred_ar_batch, axis=-1)
-                Y_batch = tf.concat(Y_batch, axis=-1)
-    
-                rnn_st_batch = Y_pred_ar_batch[:, STATE_IDX:]
-                
-                loss_spv = train_loss_fn(Y_batch, Y_pred_spv_batch)
-                loss_ar = train_loss_fn(Y_batch[:, :STATE_IDX], Y_pred_ar_batch[:, :STATE_IDX])
-
-                metric_spv = tf.reduce_mean(maxae(Y_batch, Y_pred_spv_batch))
-                metric_ar = tf.reduce_mean(maxae(Y_batch[:, :STATE_IDX], Y_pred_ar_batch[:, :STATE_IDX]))
-
+            # progress_bar.update(1)        
             
-                losses_ar.append(loss_ar.numpy())
-                losses_spv.append(loss_spv.numpy())
-                
-                metrics_ar.append(metric_ar.numpy())
-                metrics_spv.append(metric_spv.numpy())
+            inputs = seq_inputs[:, t, :, :, :] # (1, 12, 128, 256).
+            labels = seq_labels[:, t, :] # (1, 2*num_pts+1).
 
-
-            del X0, X3, Y, RGBs
-        
-        except:
-            pass
-
-    return np.mean(losses_ar), np.mean(losses_spv), np.mean(metrics_ar), np.mean(metrics_spv)
-
-
-
-
-
-
-
-def main():
- 
-  
-    # model = SequenceBaselineV1(args.M, args.num_pts, args.mtp_alpha, 
-    #             args.lr, args.optimizer, args.optimize_per_n_step) 
-    
-    model = SequencePlanningNetwork(args.M, args.num_pts)
-    model(tf.random.uniform((1, 12, 128, 256)), (tf.zeros((1, 512)), tf.zeros((1, 512))))
-    if args.ckpt: 
-        model.load_weights(args.ckpt)  # for retraining
-        print(f'loaded ckpt: {args.ckpt}')
-    
-    
-    # optimizer, lr_scheduler = model.configure_optimizers(args, model)
- 
-    optimizer = tf.keras.optimizers.SGD(learning_rate=args.lr,
-                    weight_decay=0.01, ema_momentum=0.9, clipvalue=1.0)        
-
-
-    # if args.resume and rank == 0:
-    #     print('Loading weights from', args.resume)
-    #     model.load_state_dict(torch.load(args.resume), strict=True)
-
-
-    loss_fn = MultipleTrajectoryPredictionLoss(args.mtp_alpha, args.M, args.num_pts, distance_type='angle')
- 
-
-    all_pkl = glob.glob("/home/richard/Downloads/TData1/*.pkl") 
-    split = int(len(all_pkl) * 0.85)
-    train_pkl = all_pkl[:split]
-    val_pkl = all_pkl[split:]
-
-    train_dataloader = get_train_dataloader(train_pkl)
-    val_dataloader = get_val_dataloader(val_pkl)
-
-
-    bs = args.batch_size
-    seq_length = args.horizon
-    H1 = args.optimize_per_n_step
-    n1 = seq_length//H1
-    
-    
-    for epoch in range(args.epochs):
- 
-        accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n1)]
-
-        for epid, data in enumerate(train_dataloader):  
-    
-            seq_inputs, seq_labels = data # (b, T, 12, 128, 256), (b, T, 2*num_pts+1). 
-            
-            hidden = (tf.zeros((bs, 512)), tf.zeros((bs, 512)))
- 
-
-            losses = [] 
-
-            for t1 in range(n1):
-                
-                loss = 0
-
-                with tf.GradientTape() as tape:
-
-                    for t in range(t1*H1, (t1+1)*H1):
-                        if((t1+1)*H1 > seq_length): break
-                    
-                        inputs = seq_inputs[:, t, :, :, :] # (b, 12, 128, 256).
-                        labels = seq_labels[:, t, :] # (b, 2*num_pts+1).
-                        
-                        inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) 
-                        labels = tf.convert_to_tensor(labels, dtype=tf.float32) 
-
-                        pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
-                        
-                        cls_loss, reg_loss = loss_fn(pred_cls, pred_trajectory, labels) # (,), (,).
-
-                        loss += (cls_loss + args.mtp_alpha * reg_loss) / H1 # "/H1" may cause error.
-
-                # print(f'[{epoch}-{epid}-{t1}] loss: {loss}')
-                
-                grad = tape.gradient(loss, model.trainable_variables)
-
-                for i in range(len(accum_gradients[t1])):
-                    accum_gradients[t1][i] += grad[i]
-                
- 
-
-                # optimizer.apply_gradients(zip(grad, model.trainable_variables))
-                losses.append(loss.numpy())
-                
-                hidden = [tf.convert_to_tensor(hidden[0].numpy(), dtype=tf.float32),
-                          tf.convert_to_tensor(hidden[1].numpy(), dtype=tf.float32)]
- 
- 
-                if t1 % args.log_interval == 0:
-                    log = f'[{epoch}-{epid}-{t1}] loss: {np.mean(losses)}'
-                    print(log)
-                    with open("train.txt", "a") as f: f.write(log + '\n')
-                    losses = []
- 
-            if epid % args.accum_batchs == 0:
-                for t1 in range(n1): 
-                    averaged_gradients = [accum_grad / tf.cast(args.accum_batchs, tf.float32) for accum_grad in accum_gradients[t1]]
-                    optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
-
-                accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n1)]
-
-
-            if epid % args.save_interval == 0:
-                model.save_weights(f'ckpt/DD-{epid}.h5')
-                print(f'saved ckpt: ckpt/DD-{epid}.h5')
-
- 
-
-        # lr_scheduler.step()
-
-
-
- 
-
-    #     if (epoch + 1) % args.val_per_n_epoch == 0:
-
-    #         if rank == 0:
-    #             # save model
-    #             ckpt_path = os.path.join(writer.log_dir, 'epoch_%d.pth' % epoch)
-    #             torch.save(model.module.state_dict(), ckpt_path)
-    #             print('[Epoch %d] checkpoint saved at %s' % (epoch, ckpt_path))
-
-    #         model.eval()
-
-    #         with torch.no_grad():
-
-    #             saved_metric_epoch = get_val_metric_keys()
-
-    #             for batch_idx, data in enumerate(val_dataloader):
-                    
-    #                 seq_inputs, seq_labels = data['seq_input_img'].cuda(), data['seq_future_poses'].cuda()
-
-    #                 bs = seq_labels.size(0)
-    #                 seq_length = seq_labels.size(1)
-                    
-    #                 hidden = torch.zeros((2, bs, 512), device=seq_inputs.device)
-    #                 for t in tqdm(range(seq_length), leave=False, disable=True, position=2):
-
-    #                     inputs, labels = seq_inputs[:, t, :, :, :], seq_labels[:, t, :, :]
-
-    #                     pred_cls, pred_trajectory, hidden = model(inputs, hidden)
-
-    #                     metrics = get_val_metric(pred_cls, pred_trajectory.view(-1,
-    #                                                     args.M, args.num_pts, 3), labels)
-                        
-    #                     for k, v in metrics.items():
-    #                         saved_metric_epoch[k].append(v.float().mean().item())
-                
              
-    #             metric_single = torch.zeros((len(saved_metric_epoch), ), dtype=torch.float32, device='cuda')
-    #             counter_single = torch.zeros((len(saved_metric_epoch), ), dtype=torch.int32, device='cuda')
+            inputs_t = tf.convert_to_tensor(inputs, dtype=tf.float32) 
+            labels_t = tf.convert_to_tensor(labels, dtype=tf.float32) # (1, 2*num_pts+1).
+                                
+            pred_cls, pred_trajectory, hidden = model(inputs_t, hidden) # (1, M), (1, M, 2*num_pts+1), .                
 
-    #             # From Python 3.6 onwards, the standard dict type maintains insertion order by default.
-    #             # But, programmers should not rely on it.
-    #             for i, k in enumerate(sorted(saved_metric_epoch.keys())):
-    #                 metric_single[i] = np.mean(saved_metric_epoch[k])
-    #                 counter_single[i] = len(saved_metric_epoch[k])
+            pred_cls = pred_cls.numpy()[0] # (M,).
+            pred_trajectory = pred_trajectory.numpy()[0] # (M, 2*num_pts+1).
+            
+            idx = np.argmax(pred_cls)
+            traj_pred = pred_trajectory[idx] # (2*num_pts+1,).
 
-    #             metric_gather = [torch.zeros((len(saved_metric_epoch), ), dtype=torch.float32, device='cuda')[None] for _ in range(world_size)]
-    #             counter_gather = [torch.zeros((len(saved_metric_epoch), ),
-    #                             dtype=torch.int32, device='cuda')[None] for _ in range(world_size)]
-               
-    #             if rank == 0:
-    #                 metric_gather = torch.cat(metric_gather, dim=0)  # [world_size, num_metric_keys]
-    #                 counter_gather = torch.cat(counter_gather, dim=0)  # [world_size, num_metric_keys]
-    #                 metric_gather_weighted_mean = (metric_gather * counter_gather).sum(0) / counter_gather.sum(0)
-    #                 for i, k in enumerate(sorted(saved_metric_epoch.keys())):
-    #                     writer.add_scalar(k, metric_gather_weighted_mean[i], num_steps)
-               
+            # metrics = get_val_metric(pred_cls,  # (M,) np.
+            #                     pred_trajectory, # (M, 2*num_pts+1) np.
+            #                     labels[0] # (2*num_pts+1) np.
+            #                     )
+        
 
-    #         model.train()
+            if(t%5==0):
+                frame = RGBs[0, t] # (874, 1164, 3).
+                                    
+                plot_outs(labels[0], traj_pred, frame, dir_name=f'output/val/{i}', file_name=f'{t}.png')
+          
+
+
+        del seq_inputs, seq_labels, RGBs
+    
+
+
 
  
+model = SequencePlanningNetwork(args.M, args.num_pts)
+model(tf.random.uniform((1, 12, 128, 256)), (tf.zeros((1, 512)), tf.zeros((1, 512))))
+if args.ckpt: 
+    model.load_weights(args.ckpt)  # for retraining
+    print(f'loaded ckpt: {args.ckpt}')
+
+
+# optimizer, lr_scheduler = model.configure_optimizers(args, model)
+
+optimizer = tf.keras.optimizers.SGD(learning_rate=args.lr,
+                weight_decay=0.01, ema_momentum=0.9, clipvalue=1.0)        
+
+
+# if args.resume and rank == 0:
+#     print('Loading weights from', args.resume)
+#     model.load_state_dict(torch.load(args.resume), strict=True)
+
+
+loss_fn = MultipleTrajectoryPredictionLoss(args.mtp_alpha, args.M, args.num_pts, distance_type='angle')
+
+
+all_pkl = glob.glob("/home/richard/Downloads/TData1/*.pkl") 
+split = int(len(all_pkl) * 0.85)
+train_pkl = all_pkl[:split]
+val_pkl = all_pkl[split:]
+
+train_dataloader = get_train_dataloader(train_pkl)
+val_dataloader = get_val_dataloader(val_pkl)
+
+
+bs = args.batch_size
+seq_length = args.horizon
+H1 = args.optimize_per_n_step
+n1 = seq_length//H1
+
+
+for epoch in range(args.epochs):
+
+    accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n1)]
+
+    for epid, data in enumerate(train_dataloader):  
+
+        seq_inputs, seq_labels = data # (b, T, 12, 128, 256), (b, T, 2*num_pts+1). 
+        
+        hidden = (tf.zeros((bs, 512)), tf.zeros((bs, 512)))
+
+
+        losses = [] 
+
+        for t1 in range(n1):
+            
+            loss = 0
+
+            with tf.GradientTape() as tape:
+
+                for t in range(t1*H1, (t1+1)*H1):
+                    if((t1+1)*H1 > seq_length): break
+                
+                    inputs = seq_inputs[:, t, :, :, :] # (b, 12, 128, 256).
+                    labels = seq_labels[:, t, :] # (b, 2*num_pts+1).
+                    
+                    inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) 
+                    labels = tf.convert_to_tensor(labels, dtype=tf.float32) 
+
+                    pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
+                    
+                    cls_loss, reg_loss = loss_fn(pred_cls, pred_trajectory, labels) # (,), (,).
+
+                    loss += (cls_loss + args.mtp_alpha * reg_loss) / H1 # "/H1" may cause error.
+
+            # print(f'[{epoch}-{epid}-{t1}] loss: {loss}')
+            
+            grad = tape.gradient(loss, model.trainable_variables)
+
+            for i in range(len(accum_gradients[t1])):
+                accum_gradients[t1][i] += grad[i]
+                
+
+            # optimizer.apply_gradients(zip(grad, model.trainable_variables))
+            losses.append(loss.numpy())
+            
+            hidden = [tf.convert_to_tensor(hidden[0].numpy(), dtype=tf.float32),
+                        tf.convert_to_tensor(hidden[1].numpy(), dtype=tf.float32)]
+
+
+            if t1 % args.log_interval == 0:
+                log = f'[{epoch}-{epid}-{t1}] loss: {np.mean(losses)}'
+                print(log)
+                with open("train.txt", "a") as f: f.write(log + '\n')
+                losses = []
+
+
+        if epid % args.val_interval == 0:
+            validate()
+
+
+        if epid % args.accum_batchs == 0:
+            for t1 in range(n1): 
+                averaged_gradients = [accum_grad / tf.cast(args.accum_batchs, tf.float32) for accum_grad in accum_gradients[t1]]
+                optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+
+            accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n1)]
+
+
+        if epid % args.save_interval == 0:
+            model.save_weights(f'ckpt/DD-{epid}.h5')
+            print(f'saved ckpt: ckpt/DD-{epid}.h5')
 
 
 
-if __name__ == "__main__":
-  
-    main()
+
+        
+    # lr_scheduler.step()
 
 
+
+ 

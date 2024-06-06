@@ -14,7 +14,7 @@ import math
 import numpy as np
 import common.transformations.orientation as orient
 import cv2
-# from lanes_image_space import transform_point
+from lanes_image_space import transform_point
 
 FULL_FRAME_SIZE = (1164, 874)
 W, H = FULL_FRAME_SIZE[0], FULL_FRAME_SIZE[1]
@@ -223,36 +223,36 @@ def warp_img(img):
 
 
 
-# def draw_path(img, path, x_lspace):
+def draw_path(img, path, x_lspace):
 
-#     # x: front-back, y: left-right.
-#     # x: fixed interval (1 meter?).
-#     new_xl_path, new_yl_path = zip(*[transform_point(x_lspace[i], path[i]-1) for i in range(len(path))][4:])
-#     new_xr_path, new_yr_path = zip(*[transform_point(x_lspace[i], path[i]+1) for i in range(len(path))][4:])
+    # x: front-back, y: left-right.
+    # x: fixed interval (1 meter?).
+    new_xl_path, new_yl_path = zip(*[transform_point(x_lspace[i], path[i]-1) for i in range(len(path))][4:])
+    new_xr_path, new_yr_path = zip(*[transform_point(x_lspace[i], path[i]+1) for i in range(len(path))][4:])
 
 
-#     fill_color=(128,0,255)
-#     line_color=(0,255,0)
-#     for i in range(1, len(new_xl_path)):
+    fill_color=(128,0,255)
+    line_color=(0,255,0)
+    for i in range(1, len(new_xl_path)):
 
-#         # u1,v1,u2,v2 = np.append(img_pts_l[i-1], img_pts_r[i-1])
-#         # u3,v3,u4,v4 = np.append(img_pts_l[i], img_pts_r[i])
+        # u1,v1,u2,v2 = np.append(img_pts_l[i-1], img_pts_r[i-1])
+        # u3,v3,u4,v4 = np.append(img_pts_l[i], img_pts_r[i])
 
-#         # in units of pixel coord.
-#         u1,v1,u2,v2 = new_xl_path[i-1], new_yl_path[i-1], new_xr_path[i-1], new_yr_path[i-1]
-#         u3,v3,u4,v4 = new_xl_path[i], new_yl_path[i], new_xr_path[i], new_yr_path[i]
+        # in units of pixel coord.
+        u1,v1,u2,v2 = new_xl_path[i-1], new_yl_path[i-1], new_xr_path[i-1], new_yr_path[i-1]
+        u3,v3,u4,v4 = new_xl_path[i], new_yl_path[i], new_xr_path[i], new_yr_path[i]
 
-#         # print(f'# u1,v1,u2,v2: {u1,v1,u2,v2}')
-#         # print(f'# u3,v3,u4,v4: {u3,v3,u4,v4}')
-#         pts = np.array([[u1,v1],[u2,v2],[u4,v4],[u3,v3]], np.int32).reshape((-1,1,2))
+        # print(f'# u1,v1,u2,v2: {u1,v1,u2,v2}')
+        # print(f'# u3,v3,u4,v4: {u3,v3,u4,v4}')
+        pts = np.array([[u1,v1],[u2,v2],[u4,v4],[u3,v3]], np.int32).reshape((-1,1,2))
 
-#         if fill_color:
-#             cv2.fillPoly(img,[pts],fill_color)
+        if fill_color:
+            cv2.fillPoly(img,[pts],fill_color)
 
-#         if line_color:
-#             cv2.polylines(img,[pts],True,line_color)
+        if line_color:
+            cv2.polylines(img,[pts],True,line_color)
 
-#     return img
+    return img
 
 
 
