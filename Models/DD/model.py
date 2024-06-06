@@ -2,134 +2,142 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from efficientnet_pytorch import EfficientNet
+# from efficientnet_pytorch import EfficientNet
+from EfficientNet import EfficientNetB2
+
+
+
+# class SequencePlanningNetwork(nn.Module):
+#     def __init__(self, M, num_pts):
+#         super().__init__()
+      
+#         self.M = M # 5.
+#         self.num_pts = num_pts # 33.    
+
+
+#         self.backbone = EfficientNetB2()
+
+#         self.plan_head = nn.Sequential(
+#             # 6, 450, 800 -> 1408, 14, 25
+#             # nn.AdaptiveMaxPool2d((4, 8)),  # 1408, 4, 8
+#             nn.BatchNorm2d(1408),
+#             nn.Conv2d(in_channels=1408, out_channels=32, kernel_size=1),  # (b, 32, 4, 8).
+#             nn.BatchNorm2d(32),
+#             nn.Flatten(), # (b, 1024).
+#             nn.ELU(),
+#         ) # (b, 1024).
+
+#         self.gru = nn.GRU(input_size=1024, hidden_size=512, bidirectional=True, batch_first=True)  # 1024 out
+#         self.plan_head_tip = nn.Sequential(
+#             nn.Flatten(),
+#             # nn.BatchNorm1d(1024),
+#             nn.ELU(),
+#             nn.Linear(1024, 4096),
+#             # nn.BatchNorm1d(4096),
+#             nn.ReLU(),
+#             # nn.Dropout(0.3),
+#             nn.Linear(4096, M * (num_pts * 3 + 1))  # +1 for cls
+#         )
+
+
+#     def forward(self, x, hidden):
+#         '''
+#             x: (b, 6, H, W).
+#         '''
+
+#         features = self.backbone.extract_features(x) # (b, 1408, 4, 8).
+
+#         raw_preds = self.plan_head(features) # (b, 1024).
+
+#         raw_preds, hidden = self.gru(raw_preds[:, None, :], hidden)  # N, L, H_in for batch_first=True
+#         raw_preds = self.plan_head_tip(raw_preds) # (b, M+M*num_pts*3).
+
+#         pred_cls = raw_preds[:, :self.M] # (b, 5).
+#         pred_trajectory = raw_preds[:, self.M:].reshape(-1, self.M, self.num_pts, 3) # (b, 5, 33, 3).
+
+#         pred_xs = pred_trajectory[:, :, :, 0:1].exp() # (b, 5, 33, 1).
+#         pred_ys = pred_trajectory[:, :, :, 1:2].sinh() # (b, 5, 33, 1).
+#         pred_zs = pred_trajectory[:, :, :, 2:3] # (b, 5, 33, 1).
+
+#         return pred_cls, torch.cat((pred_xs, pred_ys, pred_zs), dim=3), hidden # (b, M), (b, M, num_pts, 3), .
+
+ 
 
 
 
 
-
-class PlaningNetwork(nn.Module):
-    def __init__(self, M, num_pts):
-        super().__init__()
-        self.M = M
-        self.num_pts = num_pts
-        self.backbone = EfficientNet.from_pretrained('efficientnet-b2', in_channels=6)
-
-        use_avg_pooling = False  # TODO
-        if use_avg_pooling:
-            self.plan_head = nn.Sequential(
-                nn.AdaptiveAvgPool2d(1),
-                nn.Flatten(),
-                nn.BatchNorm1d(1408),
-                nn.ReLU(),
-                nn.Linear(1408, 4096),
-                nn.BatchNorm1d(4096),
-                nn.ReLU(),
-                # nn.Dropout(0.3),
-                nn.Linear(4096, M * (num_pts * 3 + 1))  # +1 for cls
-            )
-        else:  # more like the structure of OpenPilot
-            self.plan_head = nn.Sequential(
-                # 6, 450, 800 -> 1408, 14, 25
-                # nn.AdaptiveMaxPool2d((4, 8)),  # 1408, 4, 8
-                nn.BatchNorm2d(1408),
-                nn.Conv2d(1408, 32, 1),  # 32, 4, 8
-                nn.BatchNorm2d(32),
-                nn.Flatten(),
-                nn.ELU(),
-                nn.Linear(1024, 4096),
-                nn.BatchNorm1d(4096),
-                nn.ReLU(),
-                # nn.Dropout(0.3),
-                nn.Linear(4096, M * (num_pts * 3 + 1))  # +1 for cls
-            )
-
-
-    def forward(self, x):
-        features = self.backbone.extract_features(x)
-        raw_preds = self.plan_head(features)
-        pred_cls = raw_preds[:, :self.M]
-        pred_trajectory = raw_preds[:, self.M:].reshape(-1, self.M, self.num_pts, 3)
-
-        pred_xs = pred_trajectory[:, :, :, 0:1].exp()
-        pred_ys = pred_trajectory[:, :, :, 1:2].sinh()
-        pred_zs = pred_trajectory[:, :, :, 2:3]
-        return pred_cls, torch.cat((pred_xs, pred_ys, pred_zs), dim=3)
-
-
-
-
-
-class SequencePlanningNetwork(nn.Module):
+class SequencePlanningNetwork(tf.keras.Model):
     def __init__(self, M, num_pts):
         super().__init__()
       
         self.M = M # 5.
-        self.num_pts = num_pts # 33.    
-        self.backbone = EfficientNet.from_pretrained('efficientnet-b2', in_channels=6)
+        
+        num_pts = 192
+        self.num_pts = num_pts     
+        
+            
 
-        self.plan_head = nn.Sequential(
+        '''EfficientNetB2
+            in shape: (b, 128, 256, 3) .
+            out shape: (b, 4, 8, 1408).
+            ch format: last.
+        '''        
+        self.backbone = EfficientNetB2()
+ 
+
+        self.plan_head = tf.keras.Sequential([
             # 6, 450, 800 -> 1408, 14, 25
-            # nn.AdaptiveMaxPool2d((4, 8)),  # 1408, 4, 8
-            nn.BatchNorm2d(1408),
-            nn.Conv2d(1408, 32, 1),  # 32, 4, 8
-            nn.BatchNorm2d(32),
-            nn.Flatten(),
-            nn.ELU(),
-        )
-        self.gru = nn.GRU(input_size=1024, hidden_size=512, bidirectional=True, batch_first=True)  # 1024 out
-        self.plan_head_tip = nn.Sequential(
-            nn.Flatten(),
-            # nn.BatchNorm1d(1024),
-            nn.ELU(),
-            nn.Linear(1024, 4096),
-            # nn.BatchNorm1d(4096),
-            nn.ReLU(),
-            # nn.Dropout(0.3),
-            nn.Linear(4096, M * (num_pts * 3 + 1))  # +1 for cls
-        )
+            # nn.AdaptiveMaxPool2d((4, 8)),  # 1408, 4, 8            
+            tf.keras.layers.BatchNormalization(axis=3), # 4, 8, 1408
+            tf.keras.layers.Conv2D(32, 1, padding='valid'),  # (b, 4, 8, 32).
+            tf.keras.layers.BatchNormalization(axis=3), # (b, 4, 8, 32).
+            tf.keras.layers.Flatten(), # (b, 1024).
+            tf.keras.layers.ELU(),
+        ]) # (b, 1024).
+  
+        self.gru = tf.keras.layers.Bidirectional(tf.keras.layers.GRU(512, return_state=True, return_sequences=True))
+ 
+        self.plan_head_tip = tf.keras.Sequential([
+            tf.keras.layers.Flatten(),  # (b, 1024).
+            tf.keras.layers.ELU(),
+            tf.keras.layers.Dense(4096),  # (b, 4096).
+            tf.keras.layers.ReLU(), 
+            tf.keras.layers.Dense(M + M * (num_pts * 2 + 1)) 
+        ]) 
 
 
     def forward(self, x, hidden):
+        '''
+            x: (b, 6, H, W).
+        '''
 
-        features = self.backbone.extract_features(x)
+        features = self.backbone.extract_features(x) # (b, 1408, 4, 8).
 
-        raw_preds = self.plan_head(features)
+        raw_preds = self.plan_head(features) # (b, 1024).
 
-        raw_preds, hidden = self.gru(raw_preds[:, None, :], hidden)  # N, L, H_in for batch_first=True
-        raw_preds = self.plan_head_tip(raw_preds)
+
+        hidden_fw, hidden_bw = hidden # (b, 512), (b, 512).
+
+ 
+        raw_preds, hidden_fw, hidden_bw = self.gru(raw_preds[:, None, :], initial_state=[hidden_fw, hidden_bw]) # (b, 1, 1024), (b, 512), (b, 512).
+
+        raw_preds = self.plan_head_tip(raw_preds) # (b, M+M*(2*num_pts+1)).
 
         pred_cls = raw_preds[:, :self.M] # (b, 5).
-        pred_trajectory = raw_preds[:, self.M:].reshape(-1, self.M, self.num_pts, 3) # (b, 5, 33, 3).
+        pred_trajectory = tf.reshape(raw_preds[:, self.M:],\
+                             (-1, self.M, 2*self.num_pts+1)) # (b, 5, 2*num_pts+1).
 
-        pred_xs = pred_trajectory[:, :, :, 0:1].exp() # (b, 5, 33, 1).
-        pred_ys = pred_trajectory[:, :, :, 1:2].sinh() # (b, 5, 33, 1).
-        pred_zs = pred_trajectory[:, :, :, 2:3] # (b, 5, 33, 1).
+        path = pred_trajectory[:, :, :self.num_pts] # (b, 5, num_pts).
+        path_std = tf.math.softplus(pred_trajectory[:, :, self.num_pts:2*self.num_pts]) # (b, 5, num_pts).
+        valid_len = tf.clip_by_value(pred_trajectory[:, :, 2*self.num_pts:], 5, 192) # (b, 5, 1).
 
-        return pred_cls, torch.cat((pred_xs, pred_ys, pred_zs), dim=3), hidden # (b, M), (b, M, num_pts, 3), .
+        pred_traj = tf.concat([path, path_std, valid_len], axis=2) # (b, 5, 2*num_pts+1).
 
+        return pred_cls, pred_traj, (hidden_fw, hidden_bw) # (b, 5), (b, 5, 2*num_pts+1), .
 
-
-
-class AbsoluteRelativeErrorLoss(nn.Module):
-    def __init__(self, epsilon=1e-4):
-        super().__init__()
-        self.epsilon = epsilon
-    
-    def forward(self, pred, target):
-        error = (pred - target) / (target + self.epsilon)
-        return torch.abs(error)
+ 
 
 
-
-class SigmoidAbsoluteRelativeErrorLoss(nn.Module):
-    def __init__(self, epsilon=1e-4):
-        super().__init__()
-        self.epsilon = epsilon
-    
-    def forward(self, pred, target):
-        error = (pred - target) / (target + self.epsilon)
-        return torch.sigmoid(torch.abs(error))
 
 
 
@@ -150,9 +158,7 @@ class MultipleTrajectoryPredictionLoss(nn.Module):
         
         self.cls_loss = nn.CrossEntropyLoss()
         self.reg_loss = nn.SmoothL1Loss(reduction='none')
-        # self.reg_loss = SigmoidAbsoluteRelativeErrorLoss()
-        # self.reg_loss = AbsoluteRelativeErrorLoss()
-
+      
 
     def forward(self, pred_cls, pred_trajectory, gt):
         """

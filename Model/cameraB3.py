@@ -225,7 +225,8 @@ def warp_img(img):
 
 def draw_path(img, path, x_lspace):
 
- 
+    # x: front-back, y: left-right.
+    # x: fixed interval (1 meter?).
     new_xl_path, new_yl_path = zip(*[transform_point(x_lspace[i], path[i]-1) for i in range(len(path))][4:])
     new_xr_path, new_yr_path = zip(*[transform_point(x_lspace[i], path[i]+1) for i in range(len(path))][4:])
 
@@ -237,6 +238,7 @@ def draw_path(img, path, x_lspace):
         # u1,v1,u2,v2 = np.append(img_pts_l[i-1], img_pts_r[i-1])
         # u3,v3,u4,v4 = np.append(img_pts_l[i], img_pts_r[i])
 
+        # in units of pixel coord.
         u1,v1,u2,v2 = new_xl_path[i-1], new_yl_path[i-1], new_xr_path[i-1], new_yr_path[i-1]
         u3,v3,u4,v4 = new_xl_path[i], new_yl_path[i], new_xr_path[i], new_yr_path[i]
 

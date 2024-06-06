@@ -214,6 +214,9 @@ def block(x0):
   x = layers.add([tmp,x], name = "block"+count+"b_add")
   return x
 
+
+
+
 def top(x0):
     #--- x0.shape = (None, 4, 8, 352)
   x = layers.Conv2D(1408, 1, padding="same", name="top_conv")(x0)
@@ -309,11 +312,13 @@ def fork1(x):
 def fork2(x):
   x1 = layers.Dense(256, activation='relu', name="meta0")(x)
   out8 = layers.Dense(4, activation='sigmoid', name="meta")(x1)
+
   dp1 = layers.Dense(32, name="desire_final_dense")(x1)
   dp2 = layers.Reshape((4, 8), name="desire_reshape")(dp1)
   dp3 = layers.Softmax(axis=-1, name="desire_pred0")(dp2)
   out9 = layers.Flatten(name="desire_pred")(dp3)
   return out8, out9
+
 
 def fork3(x):
   x = layers.Dense(64, activation='relu')(x)
