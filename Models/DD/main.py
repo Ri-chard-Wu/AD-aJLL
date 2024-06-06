@@ -6,29 +6,16 @@ from tqdm import tqdm
 from argparse import ArgumentParser
 
 import numpy as np
-import torch
-from torch import nn
-import torch.nn.functional as F
-from torch import optim
-from torch.utils.data import DataLoader
+import tensorflow as tf
 
-import torch.distributed as dist
-from torch.utils.data.distributed import DistributedSampler
-
-if torch.__version__ == 'parrots':
-    from pavi import SummaryWriter
-else:
-    from torch.utils.tensorboard import SummaryWriter
-
-from data import PlanningDataset, SequencePlanningDataset, Comma2k19SequenceDataset
+# from data import PlanningDataset, SequencePlanningDataset, Comma2k19SequenceDataset
 from model import MultipleTrajectoryPredictionLoss, SequencePlanningNetwork
-from utils import draw_trajectory_on_ax, get_val_metric, get_val_metric_keys
+# from utils import draw_trajectory_on_ax, get_val_metric, get_val_metric_keys
+import cv2
+import glob
 
-
-
-
-
-
+import pickle
+from cameraB3 import transform_img, eon_intrinsics, medmodel_intrinsics
 
 PATH_DISTANCE = 192
 LANE_OFFSET = 1.8
@@ -53,71 +40,103 @@ STATE_IDX  = 1871   # o11: 512
 OUTPUT_IDX = 2383
  
 
-def get_hyperparameters(parser: ArgumentParser):
-    parser.add_argument('--batch_size', type=int, default=6)
-    parser.add_argument('--lr', type=float, default=1e-4)
-    parser.add_argument('--n_workers', type=int, default=4)
-    parser.add_argument('--epochs', type=int, default=100)
-    parser.add_argument('--log_per_n_step', type=int, default=20)
-    parser.add_argument('--val_per_n_epoch', type=int, default=1)
 
-    parser.add_argument('--resume', type=str, default='')
-
-    parser.add_argument('--M', type=int, default=5)
-    parser.add_argument('--num_pts', type=int, default=33)
-    parser.add_argument('--mtp_alpha', type=float, default=1.0)
-    parser.add_argument('--optimizer', type=str, default='sgd')
-    parser.add_argument('--sync_bn', type=bool, default=True)
-    parser.add_argument('--tqdm', type=bool, default=False)
-    parser.add_argument('--optimize_per_n_step', type=int, default=40)
-
-    try:
-        exp_name = os.environ["SLURM_JOB_ID"]
-    except KeyError:
-        exp_name = str(time.time())
-    parser.add_argument('--exp_name', type=str, default=exp_name)
-
-    return parser
-
-
-def setup(rank, world_size):
-
-    torch.cuda.set_device(rank)
-
-    dist.init_process_group('nccl', init_method='tcp://localhost:%s' % os.environ['PORT'], rank=rank, world_size=world_size)
-
-    print('[%.2f]' % time.time(), 'DDP Initialized at %s:%s' % ('localhost', os.environ['PORT']), rank, 'of', world_size, flush=True)
+Y_shape = [385, 386, 386, 58, 200, 200, 200, 8, 4, 32, 12, 512]
 
 
 
 
-# def get_dataloader(rank, world_size, batch_size, pin_memory=False, num_workers=0):
-#     train = Comma2k19SequenceDataset('data/comma2k19_train_non_overlap.txt', 'data/comma2k19/','train', use_memcache=False)
-#     val = Comma2k19SequenceDataset('data/comma2k19_val_non_overlap.txt', 'data/comma2k19/','demo', use_memcache=False)
+class AttrDict(dict):
+    def __getattr__(self, a):
+        return self[a]
 
-#     if torch.__version__ == 'parrots':
-#         dist_sampler_params = dict(num_replicas=world_size, rank=rank, shuffle=True)
-#     else:
-#         dist_sampler_params = dict(num_replicas=world_size, rank=rank, shuffle=True, drop_last=True)
-        
-#     train_sampler = DistributedSampler(train, **dist_sampler_params)
-#     val_sampler = DistributedSampler(val, **dist_sampler_params)
+  
+ 
 
-#     loader_args = dict(num_workers=num_workers, persistent_workers=True if num_workers > 0 else False, prefetch_factor=2, pin_memory=pin_memory)
-#     train_loader = DataLoader(train, batch_size, sampler=train_sampler, **loader_args)
-#     val_loader = DataLoader(val, batch_size=1, sampler=val_sampler, **loader_args)
+args = AttrDict({
+        'M': 5, 
+        'batch_size': 2, 
+        'epochs': 100000,  
+        'log_per_n_step': 20, 
+        'lr': 0.0001, 
+        'mtp_alpha': 1.0, 
+        'n_workers': 4, 
+        'num_pts': 33, 
+        'optimize_per_n_step': 8, 
+        'optimizer': 'sgd', 
+        'resume': '', 
+        'sync_bn': True, 
+        'tqdm': False, 
+        'val_per_n_epoch': 1,
+        'horizon': 512,
+    }) 
 
-#     return train_loader, val_loader
 
 
 
+ 
+
+def RGB_to_sYUVs(frame):
+   
+    bYUV = cv2.cvtColor(frame, cv2.COLOR_BGR2YUV_I420) # (1311, 1164)
+
+    sYUV = transform_img(bYUV, from_intr=eon_intrinsics, to_intr=medmodel_intrinsics,
+                            yuv=True, output_size=(512, 256))  # (384, 512)
+    
+    return sYUV
+
+         
+
+def sYUVs_to_CsYUVs(sYUVs): # sYUVs: (384, 512)
+
+    
+    H = (sYUVs.shape[0]*2)//3  # 384x2//3 = 256
+    W = sYUVs.shape[1]         # 512
+    CsYUVs = np.zeros((6, H//2, W//2), dtype=np.uint8)
+
+    CsYUVs[0] = sYUVs[0:H:2, 0::2]  # [2::2] get every even starting at 2
+    CsYUVs[1] = sYUVs[1:H:2, 0::2]  # [start:end:step], [2:4:2] get every even starting at 2 and ending at 4
+    CsYUVs[2] = sYUVs[0:H:2, 1::2]  # [1::2] get every odd index, [::2] get every even
+    CsYUVs[3] = sYUVs[1:H:2, 1::2]  # [::n] get every n-th item in the entire sequence
+    CsYUVs[4] = sYUVs[H:H+H//4].reshape((H//2, W//2))
+    CsYUVs[5] = sYUVs[H+H//4:H+H//2].reshape((H//2, W//2))
+
+ 
+    return CsYUVs # (6, 128, 256)
+
+
+def RGB_to_YUV(frame):
+
+    if frame is None: return None
+
+    frame = RGB_to_sYUVs(frame)
+    frame = sYUVs_to_CsYUVs(frame)
+    return frame
+
+
+def read_frames(hevc_file):
+
+    frames = []
+
+    cap = cv2.VideoCapture(hevc_file)
+
+    ret, frame = cap.read()  # frame: (874, 1164, 3) bgr img in uint8 np array.
+     
+    while ret:        
+        frames.append(frame)
+        ret, frame = cap.read()  
+
+    cap.release()
+    return frames
+ 
+  
 
 def get_train_dataloader(pkl_files):
   
     hevc_files = [pkl_file.replace('data.pkl', 'fcamera.hevc') for pkl_file in pkl_files]    
 
-    H = para.horizon 
-    B = para.batch_size
+    H = args.horizon 
+    B = args.batch_size
     n_B = len(pkl_files) // B 
          
     reps = 1
@@ -188,35 +207,9 @@ def get_train_dataloader(pkl_files):
                 del X0, Y
 
 
- 
+  
 
-class SequenceBaselineV1(nn.Module):
-    def __init__(self, M, num_pts, mtp_alpha, lr, optimizer, optimize_per_n_step=40) -> None:
-        super().__init__()
-        self.M = M # 5.
-        self.num_pts = num_pts # 33.
-        self.mtp_alpha = mtp_alpha
-        self.lr = lr
-        self.optimizer = optimizer # 'sgd'.
-
-        self.net = SequencePlanningNetwork(args.M, args.num_pts)
-
-        self.optimize_per_n_step = optimize_per_n_step  # for the gru module
-
-    # @staticmethod
-    # def configure_optimizers(args, model):
-      
-    #     lr_scheduler = optim.lr_scheduler.StepLR(optimizer, 20, 0.9) # lr = lr * 0.9 every 20 epochs.
-
-    #     return optimizer, lr_scheduler
-
-    def forward(self, x, hidden=None):
- 
-        return self.net(x, hidden) # (b, M), (b, M, num_pts, 3), .
-
-
-
-def main(rank, world_size, args):
+def main():
  
   
     # model = SequenceBaselineV1(args.M, args.num_pts, args.mtp_alpha, 
@@ -235,9 +228,12 @@ def main(rank, world_size, args):
     #     model.load_state_dict(torch.load(args.resume), strict=True)
 
 
-    loss = MultipleTrajectoryPredictionLoss(args.mtp_alpha, args.M, args.num_pts, distance_type='angle')
+    loss_fn = MultipleTrajectoryPredictionLoss(args.mtp_alpha, args.M, args.num_pts, distance_type='angle')
  
 
+    all_pkl = glob.glob("/home/richard/Downloads/TData1/*.pkl") 
+    split = int(len(all_pkl) * 0.85)
+    train_pkl = all_pkl[:split]
     train_dataloader = get_train_dataloader(train_pkl)
 
 
@@ -260,19 +256,22 @@ def main(rank, world_size, args):
 
                 with tf.GradientTape() as tape:
 
-                    for t in range(t*n1, (t+1)*n1):
-
-                        num_steps += 1
+                    for t in range(t1*H1, (t1+1)*H1):
+                        if((t1+1)*H1 > seq_length): break
 
                         inputs, labels = seq_inputs[:, t, :, :, :], \
                                 seq_labels[:, t, :] # (b, 12, 128, 256), (b, 2*num_pts+1).
-                                        
+
+                        inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) 
+                        labels = tf.convert_to_tensor(labels, dtype=tf.float32) 
+
                         pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
                         
-                        cls_loss, reg_loss = loss(pred_cls, pred_trajectory, labels) # (,), (,).
+                        cls_loss, reg_loss = loss_fn(pred_cls, pred_trajectory, labels) # (,), (,).
 
                         loss += (cls_loss + args.mtp_alpha * reg_loss) / H1 # "/H1" may cause error.
-                
+
+                print(f'[{epoch}-{epid}-{t1}] loss: {loss}')
                 
                 grad = tape.gradient(loss, model.trainable_variables)
                 optimizer.apply_gradients(zip(grad, model.trainable_variables))
@@ -402,11 +401,7 @@ def main(rank, world_size, args):
 
 
 if __name__ == "__main__":
-    print('[%.2f]' % time.time(), 'starting job...', os.environ['SLURM_PROCID'], 'of', os.environ['SLURM_NTASKS'], flush=True)
+  
+    main()
 
-    parser = ArgumentParser()
-    parser = get_hyperparameters(parser)
-    args = parser.parse_args()
 
-    setup(rank=int(os.environ['SLURM_PROCID']), world_size=int(os.environ['SLURM_NTASKS']))
-    main(rank=int(os.environ['SLURM_PROCID']), world_size=int(os.environ['SLURM_NTASKS']), args=args)

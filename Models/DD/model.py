@@ -1,8 +1,6 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
-# from efficientnet_pytorch import EfficientNet
+
+import tensorflow as tf
 from EfficientNet import EfficientNetB2
 
  
@@ -97,17 +95,10 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         self.alpha = alpha  # TODO: currently no use
         self.M = M
         self.num_pts = num_pts
-        
-        self.distance_type = distance_type
-
-        if self.distance_type == 'angle': # yes.
-            self.distance_func = nn.CosineSimilarity(dim=2)
-        else:
-            raise NotImplementedError
-        
+         
         self.cls_loss = tf.keras.losses.CategoricalCrossentropy(reduction='none')        
         # self.reg_loss = nn.SmoothL1Loss(reduction='none')
-        self.reg_loss = tf.keras.losses.Huber(delta=1.0)
+        self.reg_loss = tf.keras.losses.Huber(delta=1.0, reduction='none')
 
       
  
@@ -117,10 +108,6 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
             pred_trajectory: (b, 5, 2*num_pts+1), 
             gt: (b, 2*num_pts+1).
         '''        
-
-        # assert len(pred_cls) == len(pred_trajectory) == len(gt)
-
-        # pred_trajectory = pred_trajectory.reshape(-1, self.M, self.num_pts, 3) # (b, M, num_pts, 3).
 
         path_gt = gt[:, :self.num_pts] # (b, num_pts).
         valid_len_gt = tf.clip_by_value(gt[:, 2*self.num_pts], 5, 192-1) # (b,).
@@ -133,28 +120,46 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         M = self.M
 
 
-        with torch.no_grad():
+        # with torch.no_grad():
             
-            # pred_end_positions = pred_traj[:, :, self.num_pts-1, :]  # (b, M, 3).
-            sel = tf.stack([tf.repeat(tf.range(b), repeats=M, axis=0),
-                            tf.convert_to_tensor(list(range(M))*b, dtype=tf.int32), 
-                            tf.repeat(L, repeats=M, axis=0)], 
-                        axis=1)   
-            pred_end_positions = tf.reshape(tf.gather_nd(path_pred, sel), (b, M)) # (b, 5).
+        #     # pred_end_positions = pred_traj[:, :, self.num_pts-1, :]  # (b, M, 3).
+        #     sel = tf.stack([tf.repeat(tf.range(b), repeats=M, axis=0),
+        #                     tf.convert_to_tensor(list(range(M))*b, dtype=tf.int32), 
+        #                     tf.repeat(L, repeats=M, axis=0)], 
+        #                 axis=1)   
+        #     pred_end_positions = tf.reshape(tf.gather_nd(path_pred, sel), (b, M)) # (b, 5).
 
-            # gt_end_positions = gt[:, self.num_pts-1:, :].expand(-1, self.M, -1)  # (b, M, 3).
-            sel = tf.stack([tf.range(b), L], axis=1)  
-            gt_end_positions = tf.gather_nd(path_gt, sel)[:, None] # (b, 1).
+        #     # gt_end_positions = gt[:, self.num_pts-1:, :].expand(-1, self.M, -1)  # (b, M, 3).
+        #     sel = tf.stack([tf.range(b), L], axis=1)  
+        #     gt_end_positions = tf.gather_nd(path_gt, sel)[:, None] # (b, 1).
 
-            
-            # distances = 1 - self.distance_func(pred_end_positions, gt_end_positions)  # (b, M).
+          
 
-            distances = (pred_end_positions - gt_end_positions) ** 2 # (b, 5).
+        #     distances = (pred_end_positions - gt_end_positions) ** 2 # (b, 5).
 
-            # index = distances.argmin(dim=1)  # (b,).
-            gt_cls = tf.argmin(distances, axis=1) # (b,).
+        #     # index = distances.argmin(dim=1)  # (b,).
+        #     gt_cls = tf.argmin(distances, axis=1) # (b,).
 
+        nograd_path_pred = tf.stop_gradient(path_pred)
+        nograd_path_gt = tf.stop_gradient(path_gt)
+        nograd_L = tf.stop_gradient(L)
  
+        sel = tf.stack([tf.repeat(tf.range(b), repeats=M, axis=0),
+                        tf.convert_to_tensor(list(range(M))*b, dtype=tf.int32), 
+                        tf.repeat(nograd_L, repeats=M, axis=0)], 
+                    axis=1)   
+        pred_end_positions = tf.reshape(tf.gather_nd(nograd_path_pred, sel), (b, M)) # (b, 5).
+ 
+        sel = tf.stack([tf.range(b), nograd_L], axis=1)  
+        gt_end_positions = tf.gather_nd(nograd_path_gt, sel)[:, None] # (b, 1).
+ 
+        distances = (pred_end_positions - gt_end_positions) ** 2 # (b, 5).
+ 
+        gt_cls = tf.argmin(distances, axis=1) # (b,).
+        gt_cls = tf.cast(gt_cls, dtype=tf.int32)
+
+
+
         # pred_traj = pred_traj[torch.tensor(range(len(gt_cls)),\
         #                          device=gt_cls.device), index, ...]  # (b, num_pts, 3).
         sel = tf.stack([tf.range(b), gt_cls], axis=1) 

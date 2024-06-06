@@ -1,5 +1,4 @@
-#  tf.keras.layers
-# tf.keras.Model
+
 
 
 # from __future__ import absolute_import
@@ -10,6 +9,7 @@ import os
 import math
 import string
 import collections 
+import tensorflow as tf
 
 BlockArgs = collections.namedtuple('BlockArgs', [
     'kernel_size', 'num_repeat', 'input_filters', 'output_filters',
@@ -200,7 +200,7 @@ def EfficientNet(width_coefficient,
                  ):
   
     img_input = tf.keras.Input(shape=input_shape)    
-    img = layers.Permute((2, 3, 1))(img_input) # (b, 128, 256, 12).
+    img = tf.keras.layers.Permute((2, 3, 1))(img_input) # (b, 128, 256, 12).
 
     bn_axis = 3 if tf.keras.backend.image_data_format() == 'channels_last' else 1
     activation = get_swish()
