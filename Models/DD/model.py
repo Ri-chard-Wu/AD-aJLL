@@ -42,12 +42,15 @@ class SequencePlanningNetwork(tf.keras.Model):
         self.plan_head_tip = tf.keras.Sequential([
             tf.keras.layers.Flatten(),  # (b, 1024).
             tf.keras.layers.ELU(),
-            tf.keras.layers.Dense(4096),  # (b, 4096).
-            tf.keras.layers.ReLU(), 
+            
+            # tf.keras.layers.Dense(4096),  # (b, 4096).
+            tf.keras.layers.Dense(256, activation='relu'),  # (b, 256).
+            tf.keras.layers.Dense(256, activation='relu'),
+            tf.keras.layers.Dense(256, activation='relu'),
+            tf.keras.layers.Dense(128, activation='relu'), 
             tf.keras.layers.Dense(M + M * (num_pts * 2 + 1)) 
         ]) 
-
-     
+ 
 
     def call(self, x, hidden, training=True):
         '''
