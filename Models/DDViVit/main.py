@@ -19,7 +19,7 @@ from cameraB3 import transform_img, eon_intrinsics, medmodel_intrinsics, draw_pa
  
  
 from parameters import train_args as args
-
+from parameters import transformerEncoder_args as enc_args
 
 PATH_DISTANCE = 192
 LANE_OFFSET = 1.8
@@ -383,60 +383,59 @@ val_dataloader = get_val_dataloader(val_pkl)
 
 
 bs = args.batch_size
-seq_length = args.horizon
-H1 = args.optimize_per_n_step
-n1 = seq_length//H1
+eps_len = args.horizon
+
+seq_len = enc_args.seq_len
+n_seq = eps_len//seq_len
 
 
 for epoch in range(args.epochs):
 
-    accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n1)]
+    accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n_seq)]
 
     for epid, data in enumerate(train_dataloader):  
 
-        seq_inputs, seq_labels = data # (b, T, 12, 128, 256), (b, T, 2*num_pts+1). 
-        
-        hidden = (tf.zeros((bs, 512)), tf.zeros((bs, 512)))
-
+        seq_inputs, seq_labels = data # (b, eps_len, 12, 128, 256), (b, eps_len, 2*num_pts+1). 
+         
 
         losses = [] 
 
-        for t1 in range(n1):
-            
-            loss = 0
+        for t in range(0, eps_len-seq_len): 
 
-            with tf.GradientTape() as tape:
+            inputs = seq_inputs[:, t:t+seq_len, :, :, :] # (b, seq_len, 12, 128, 256).
+            labels = seq_labels[:, t+seq_len-1, :] # (b, 2*num_pts+1).
+                         
+            inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) # (b, seq_len, 12, 128, 256).
+            labels = tf.convert_to_tensor(labels, dtype=tf.float32) # (b, 2*num_pts+1).
 
-                for t in range(t1*H1, (t1+1)*H1):
-                    if((t1+1)*H1 > seq_length): break
+            input_past = inputs[:,:seq_len-1, :, :, :] # (b, seq_len-1, 12, 128, 256).
+            input_cur = inputs[:,seq_len-1, :, :, :] # (b, 12, 128, 256).
+
+            with tf.GradientTape() as tape: 
+ 
                 
-                    inputs = seq_inputs[:, t, :, :, :] # (b, 12, 128, 256).
-                    labels = seq_labels[:, t, :] # (b, 2*num_pts+1).
-                    
-                    inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) 
-                    labels = tf.convert_to_tensor(labels, dtype=tf.float32) 
+                # feature_cur = self.extract_feature(x)[:, None, :] # (b, 1, 1024). 
+                # feature_cur = self.extract_feature(x) # (b, 1024). 
 
-                    pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
-                    
-                    cls_loss, reg_loss, valid_len_loss = loss_fn(pred_cls, pred_trajectory, labels) # (,), (,).
+                feature_past = tf.map_fn(self.extract_feature, input_past) # (b, seq_len-1, 768).             
+                # feature_cur = self.extract_feature(input_cur)[:, None, :] # (b, 1, 1024).
+                # feature = tf.concat([feature_past, feature_cur], axis=1) # (b, seq_len, 1024).              
 
-                    loss += (cls_loss + args.mtp_alpha * reg_loss + valid_len_loss) / H1 # "/H1" may cause error.
-
-            # print(f'[{epoch}-{epid}-{t1}] loss: {loss}')
-            
+                pred_trajectory = model(input_cur, feature_past) # (b, 2*num_pts+1). 
+                loss = loss_fn(pred_trajectory, labels) # (,), (,).
+ 
             grad = tape.gradient(loss, model.trainable_variables)
 
-            for i in range(len(accum_gradients[t1])):
-                accum_gradients[t1][i] += grad[i]
+            for i in range(len(accum_gradients[t])):
+                accum_gradients[t][i] += grad[i]
                 
             losses.append(loss.numpy())
             
             hidden = [tf.convert_to_tensor(hidden[0].numpy(), dtype=tf.float32),
                         tf.convert_to_tensor(hidden[1].numpy(), dtype=tf.float32)]
-
-
-            if t1 % args.log_interval == 0:
-                log = f'[{epoch}-{epid}-{t1}] loss: {np.mean(losses)}'
+ 
+            if t % args.log_interval == 0:
+                log = f'[{epoch}-{epid}-{t}] loss: {np.mean(losses)}'
                 print(log)
                 with open("train.txt", "a") as f: f.write(log + '\n')
                 losses = []
@@ -447,11 +446,11 @@ for epoch in range(args.epochs):
 
 
         if epid % args.accum_batchs == 0:
-            for t1 in range(n1): 
-                averaged_gradients = [accum_grad / tf.cast(args.accum_batchs, tf.float32) for accum_grad in accum_gradients[t1]]
+            for t in range(n_seq): 
+                averaged_gradients = [accum_grad / tf.cast(args.accum_batchs, tf.float32) for accum_grad in accum_gradients[t]]
                 optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
 
-            accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n1)]
+            accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n_seq)]
 
 
         if epid % args.save_interval == 0:

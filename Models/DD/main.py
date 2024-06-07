@@ -66,11 +66,11 @@ args = AttrDict({
         'optimize_per_n_step': 32, 
            
         'num_pts': 192,
-        
+
         'horizon': 128,
         'horizon_val': 128,
 
-        'ckpt': [None, f'ckpt/DD-160.h5'][0],
+        'ckpt': [None, f'ckpt/DD-240.h5'][0],
         
         'save_interval': 20,
         'log_interval': 8,
@@ -312,7 +312,7 @@ def plot_outs(traj_true, # (2*num_pts+1,).
 
     # ----------------------- 
     plt.subplot(222)   
-    l = int(valid_len_pred)    
+    # l = int(valid_len_pred)    
     plt.imshow(draw_path(frame.copy(), path_pred[:l], x_lspace[:l]))  
     plt.title(f"pred, l: {l}")
 
@@ -342,7 +342,7 @@ def validate(n=3):
         # progress_bar = tqdm(total=H, desc=f"executing val episodes {i+1} / {n}...")
           
         bs = 1
-        hidden = (tf.zeros((bs, 512)), tf.zeros((bs, 512)))
+        hidden = tf.zeros((bs, 512))
 
     
         for t in range(H):
@@ -356,14 +356,10 @@ def validate(n=3):
             inputs_t = tf.convert_to_tensor(inputs, dtype=tf.float32) 
             labels_t = tf.convert_to_tensor(labels, dtype=tf.float32) # (1, 2*num_pts+1).
                                 
-            pred_cls, pred_trajectory, hidden = model(inputs_t, hidden) # (1, M), (1, M, 2*num_pts+1), .                
+            traj_pred, hidden = model(inputs_t, hidden) # (1, 2*num_pts+1), .                
 
-            pred_cls = pred_cls.numpy()[0] # (M,).
-            pred_trajectory = pred_trajectory.numpy()[0] # (M, 2*num_pts+1).
-            
-            idx = np.argmax(pred_cls)
-            traj_pred = pred_trajectory[idx] # (2*num_pts+1,).
-
+            traj_pred = traj_pred.numpy()[0] # (2*num_pts+1,).
+             
             # metrics = get_val_metric(pred_cls,  # (M,) np.
             #                     pred_trajectory, # (M, 2*num_pts+1) np.
             #                     labels[0] # (2*num_pts+1) np.
@@ -384,7 +380,7 @@ def validate(n=3):
 
  
 model = SequencePlanningNetwork(args.M, args.num_pts)
-model(tf.random.uniform((1, 12, 128, 256)), (tf.zeros((1, 512)), tf.zeros((1, 512))))
+model(tf.random.uniform((1, 12, 128, 256)), tf.zeros((1, 512)))
 if args.ckpt: 
     model.load_weights(args.ckpt)  # for retraining
     print(f'loaded ckpt: {args.ckpt}')
@@ -427,7 +423,7 @@ for epoch in range(args.epochs):
 
         seq_inputs, seq_labels = data # (b, T, 12, 128, 256), (b, T, 2*num_pts+1). 
         
-        hidden = (tf.zeros((bs, 512)), tf.zeros((bs, 512)))
+        hidden = tf.zeros((bs, 512))
 
 
         losses = [] 
@@ -447,11 +443,11 @@ for epoch in range(args.epochs):
                     inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) 
                     labels = tf.convert_to_tensor(labels, dtype=tf.float32) 
 
-                    pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
+                    pred_trajectory, hidden = model(inputs, hidden) # (b, 2*num_pts+1), .
                     
-                    cls_loss, reg_loss, valid_len_loss = loss_fn(pred_cls, pred_trajectory, labels) # (,), (,).
+                    reg_loss, valid_len_loss = loss_fn(pred_trajectory, labels) # (,), (,).
 
-                    loss += (cls_loss + args.mtp_alpha * reg_loss + valid_len_loss) / H1 # "/H1" may cause error.
+                    loss += (reg_loss + valid_len_loss) / H1 # "/H1" may cause error.
 
             # print(f'[{epoch}-{epid}-{t1}] loss: {loss}')
             
@@ -462,8 +458,7 @@ for epoch in range(args.epochs):
                 
             losses.append(loss.numpy())
             
-            hidden = [tf.convert_to_tensor(hidden[0].numpy(), dtype=tf.float32),
-                        tf.convert_to_tensor(hidden[1].numpy(), dtype=tf.float32)]
+            hidden = tf.convert_to_tensor(hidden.numpy(), dtype=tf.float32)
 
 
             if t1 % args.log_interval == 0:
