@@ -30,25 +30,22 @@ class AttrDict(dict):
  
 
 train_args = AttrDict({
-        'M': 5, 
-        'batch_size': 1, 
-        'accum_batchs': 8,        
+       
+        'batch_size': 8, 
+        'accum_steps': 4,        
         'epochs': 100000,  
-        'log_per_n_step': 20, 
-        'lr': 0.0001, 
-        'mtp_alpha': 1.0,  
-        'optimize_per_n_step': 32, 
-           
+        
+        'lr': 0.0001,   
         'num_pts': 192,
         
-        'horizon': 128,
+        'horizon': 512,
         'horizon_val': 128,
 
         'ckpt': [None, f'ckpt/DD-160.h5'][0],
         
-        'save_interval': 20,
+        'save_interval': 25,
         'log_interval': 8,
-        'val_interval': 8
+        'val_interval': 25
 
     }) 
  
@@ -60,7 +57,7 @@ transformerEncoder_args = AttrDict({
         "hidden_size": 768, 
         "dropout_rate": 0.0, 
         "mlp_dim": 3072,
-        "seq_len": 100
+        "seq_len": 32
     })
 
  

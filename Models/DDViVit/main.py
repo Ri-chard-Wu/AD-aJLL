@@ -114,70 +114,56 @@ def get_train_dataloader(pkl_files):
     H = args.horizon 
     B = args.batch_size
     n_B = len(pkl_files) // B 
-         
-    reps = 1
+          
+    seq_len = enc_args.seq_len
 
-    while(1): 
+    fidx = 0
 
-        gfidx = 0
+    while(1):  
+        
+        X0 = np.zeros((B, H, 12, 128, 256), dtype=np.uint8)            
+        X3 = np.zeros((B, H, 512), dtype=np.float32)    
+        Y = [np.zeros((B, H, s)) for s in Y_shape]
 
-        for bidx in range(n_B):
-
-            if((bidx+1) * B > len(pkl_files)): break
- 
-            for ridx in range(reps): 
-    
-                X0 = np.zeros((B, H, 12, 128, 256), dtype=np.uint8)            
-                X3 = np.zeros((B, H, 512), dtype=np.float32)    
-                Y = [np.zeros((B, H, s)) for s in Y_shape]
-    
-                # progress_bar = tqdm(total=B, desc="sampleing training data...")
-                
-                
-                for fidx in range(B):
-                    
-                    # progress_bar.update(1)
-
-
-                    while(1):
-                        pkl_file = pkl_files[gfidx]
-                        hevc_file = hevc_files[gfidx]                    
-                        frames = read_frames(hevc_file) 
-
-                        gfidx += 1
-                        if(gfidx >= len(pkl_files)): gfidx = 0
-
-                        if(len(frames)-H > 0):  
-                            break
-                        else:
-                            print(f'[Warning] len(frames)-H <= 0): {hevc_file}')                        
-                            continue
-                    
-                    t0 = np.random.choice(np.arange(len(frames)-H), size=1)[0]
-                    frames = frames[t0:t0+H+1]
-    
-                    with open(pkl_file, 'rb') as f:      
-
-                        data = pickle.load(f)   
-                        assert data['Xin3'].shape[1] == 512
-                           
-                        for i in range(12):
-                            assert data['Y'][i].shape[1] == Y_shape[i]
-    
-                    for t in range(H):   
+        for bidx in range(B):
             
-                        X0[fidx, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
-                        X3[fidx, t] = data['Xin3'][t0+t]
-                        for j in range(12):
-                            Y[j][fidx, t] = data['Y'][j][t0+t]
+            while(1):
+                pkl_file = pkl_files[fidx]
+                hevc_file = hevc_files[fidx]                    
+                frames = read_frames(hevc_file) 
+
+                fidx += 1
+                if(fidx >= len(pkl_files)): fidx = 0
+
+                if(len(frames)-H > 0):  
+                    break
+                else:
+                    print(f'[Warning] len(frames)-H <= 0): {hevc_file}')                        
+                    continue
+            
+            t0 = np.random.choice(np.arange(len(frames)-H), size=1)[0]
+            frames = frames[t0:t0+H+1]
+
+            with open(pkl_file, 'rb') as f:      
+
+                data = pickle.load(f)   
+                assert data['Xin3'].shape[1] == 512
+                    
+                for i in range(12):
+                    assert data['Y'][i].shape[1] == Y_shape[i]
+
+            for t in range(H):   
+    
+                X0[bidx, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
+                X3[bidx, t] = data['Xin3'][t0+t]
+                for j in range(12):
+                    Y[j][bidx, t] = data['Y'][j][t0+t]
 
 
-                    # fidx += 1
-
-
-                yield X0, Y[0] # (b, T, 12, 128, 256), (b, T, 2*num_pts+1).
-
-                del X0, Y
+        for t in range(0, H-seq_len): 
+            yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1, :] # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1).
+            
+        del X0, Y
 
 
   
@@ -352,7 +338,7 @@ def validate(n=3):
 
 
  
-model = SequencePlanningNetwork(args.M, args.num_pts)
+model = SequencePlanningNetwork()
 model(tf.random.uniform((1, 12, 128, 256)), (tf.zeros((1, 512)), tf.zeros((1, 512))))
 if args.ckpt: 
     model.load_weights(args.ckpt)  # for retraining
@@ -370,7 +356,7 @@ optimizer = tf.keras.optimizers.SGD(learning_rate=args.lr,
 #     model.load_state_dict(torch.load(args.resume), strict=True)
 
 
-loss_fn = MultipleTrajectoryPredictionLoss(args.mtp_alpha, args.M, args.num_pts, distance_type='angle')
+loss_fn = MultipleTrajectoryPredictionLoss()
 
 
 all_pkl = glob.glob("/home/richard/Downloads/TData1/*.pkl") 
@@ -383,75 +369,57 @@ val_dataloader = get_val_dataloader(val_pkl)
 
 
 bs = args.batch_size
-eps_len = args.horizon
-
+eps_len = args.horizon 
 seq_len = enc_args.seq_len
 n_seq = eps_len//seq_len
 
 
 for epoch in range(args.epochs):
-
-    accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n_seq)]
+ 
 
     for epid, data in enumerate(train_dataloader):  
 
-        seq_inputs, seq_labels = data # (b, eps_len, 12, 128, 256), (b, eps_len, 2*num_pts+1). 
-         
+        inputs, labels = data # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1). 
+          
+        inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) # (b, seq_len, 12, 128, 256).
+        labels = tf.convert_to_tensor(labels, dtype=tf.float32) # (b, 2*num_pts+1).
 
-        losses = [] 
+        input_past = inputs[:,:seq_len-1, :, :, :] # (b, seq_len-1, 12, 128, 256).
+        input_cur = inputs[:,seq_len-1, :, :, :] # (b, 12, 128, 256).
 
-        for t in range(0, eps_len-seq_len): 
+        accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
 
-            inputs = seq_inputs[:, t:t+seq_len, :, :, :] # (b, seq_len, 12, 128, 256).
-            labels = seq_labels[:, t+seq_len-1, :] # (b, 2*num_pts+1).
-                         
-            inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) # (b, seq_len, 12, 128, 256).
-            labels = tf.convert_to_tensor(labels, dtype=tf.float32) # (b, 2*num_pts+1).
-
-            input_past = inputs[:,:seq_len-1, :, :, :] # (b, seq_len-1, 12, 128, 256).
-            input_cur = inputs[:,seq_len-1, :, :, :] # (b, 12, 128, 256).
-
+        for aidx in range(args.accum_steps):
+            
+            input_past_mb = input_past[aidx*bs:(aidx+1)*bs, ...]
+            input_cur_mb = input_cur[aidx*bs:(aidx+1)*bs, ...]
+            labels_mb = labels[aidx*bs:(aidx+1)*bs, ...]
+            
             with tf.GradientTape() as tape: 
- 
-                
-                # feature_cur = self.extract_feature(x)[:, None, :] # (b, 1, 1024). 
-                # feature_cur = self.extract_feature(x) # (b, 1024). 
 
-                feature_past = tf.map_fn(self.extract_feature, input_past) # (b, seq_len-1, 768).             
-                # feature_cur = self.extract_feature(input_cur)[:, None, :] # (b, 1, 1024).
-                # feature = tf.concat([feature_past, feature_cur], axis=1) # (b, seq_len, 1024).              
+                feature_past = tf.map_fn(model.extract_feature, input_past_mb) # (b, seq_len-1, 768).             
+                pred_trajectory = model(input_cur_mb, feature_past) # (b, 2*num_pts+1). 
+                loss = loss_fn(pred_trajectory, labels_mb) # (,), (,).
 
-                pred_trajectory = model(input_cur, feature_past) # (b, 2*num_pts+1). 
-                loss = loss_fn(pred_trajectory, labels) # (,), (,).
- 
             grad = tape.gradient(loss, model.trainable_variables)
 
-            for i in range(len(accum_gradients[t])):
-                accum_gradients[t][i] += grad[i]
-                
-            losses.append(loss.numpy())
-            
-            hidden = [tf.convert_to_tensor(hidden[0].numpy(), dtype=tf.float32),
-                        tf.convert_to_tensor(hidden[1].numpy(), dtype=tf.float32)]
+            for i in range(len(accum_gradients)):
+                accum_gradients[i] += grad[i] 
+
+        averaged_gradients = [accum_grad / tf.cast(args.accum_steps, tf.float32) for accum_grad in accum_gradients]
+        optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+
+     
  
-            if t % args.log_interval == 0:
-                log = f'[{epoch}-{epid}-{t}] loss: {np.mean(losses)}'
-                print(log)
-                with open("train.txt", "a") as f: f.write(log + '\n')
-                losses = []
-
-
+        if epid % args.log_interval == 0:
+            log = f'[{epoch}-{epid}] loss: {loss.numpy()}'
+            print(log)
+            with open("train.txt", "a") as f: f.write(log + '\n')
+           
+ 
         if epid % args.val_interval == 0:
             validate()
-
-
-        if epid % args.accum_batchs == 0:
-            for t in range(n_seq): 
-                averaged_gradients = [accum_grad / tf.cast(args.accum_batchs, tf.float32) for accum_grad in accum_gradients[t]]
-                optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
-
-            accum_gradients = [[tf.zeros_like(var) for var in model.trainable_variables] for _ in range(n_seq)]
-
+ 
 
         if epid % args.save_interval == 0:
             model.save_weights(f'ckpt/DD-{epid}.h5')

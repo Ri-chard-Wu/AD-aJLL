@@ -8,11 +8,9 @@ from parameters import transformerEncoder_args as enc_args
  
 
 class SequencePlanningNetwork(tf.keras.Model):
-    def __init__(self, M, num_pts):
+    def __init__():
         super().__init__()
       
-        self.M = M # 5.
-        
         num_pts = 192
         self.num_pts = num_pts     
         
@@ -126,13 +124,11 @@ class SequencePlanningNetwork(tf.keras.Model):
 
 class MultipleTrajectoryPredictionLoss(tf.keras.Model):
 
-    def __init__(self, alpha, M, num_pts, distance_type='angle'):
+    def __init__(self):
         
         super().__init__()
-
-
-        self.M = M
-        self.num_pts = num_pts # 192.
+ 
+        self.num_pts = 192 # 192.
                
         self.reg_loss = tf.keras.losses.Huber(delta=1.0, reduction='none')
 
@@ -156,7 +152,7 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         reg_loss = self.reg_loss(path_true, path_pred) # (b,). 
         reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
         
-        return reg_loss, valid_len_loss # (,), (,).
+        return reg_loss + valid_len_loss # (,), (,).
 
 
       
