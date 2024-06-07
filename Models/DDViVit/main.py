@@ -159,17 +159,15 @@ def get_train_dataloader(pkl_files):
                 for j in range(12):
                     Y[j][bidx, t] = data['Y'][j][t0+t]
 
+            print(f'\rsampling training data {bidx+1} / {B}', end="")
 
+        print()
         for t in range(0, H-seq_len): 
             yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1, :] # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1).
             
         del X0, Y
 
-
-  
-
-
-
+ 
 
 
 def get_val_dataloader(pkl_files):
@@ -217,17 +215,15 @@ def get_val_dataloader(pkl_files):
                 Y[j][0, t] = data['Y'][j][t0+t]
 
 
-        yield X0, Y[0], RGBs
+        skip = 32
+        for t in range(0, H-enc_args.seq_len, skip): 
+            yield X0[:, t:t+enc_args.seq_len, :, :, :], Y[0][:, t+enc_args.seq_len-1, :], RGBs[:, t+enc_args.seq_len-1, :, :, :] # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1), (1, 874, 1164, 3).
+            
+        # yield X0, Y[0], RGBs
 
         del X0, X3, Y, RGBs
 
- 
-
-
-
-
-
-
+  
 
  
 def plot_outs(traj_true, # (2*num_pts+1,).
@@ -281,59 +277,39 @@ def plot_outs(traj_true, # (2*num_pts+1,).
  
 
 
-def validate(n=3):
-
-    print('validating ...')
-        
-    H = args.horizon_val
+def validate(n=64):
   
+    seq_len = enc_args.seq_len
         
-    for i, data in tqdm(enumerate(val_dataloader)):
+    for i, data in enumerate(val_dataloader):
 
         if i >= n: break
-
-        seq_inputs, seq_labels, RGBs = data
  
-        # progress_bar = tqdm(total=H, desc=f"executing val episodes {i+1} / {n}...")
-          
+
+        inputs, labels, RGBs = data # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1), (1, 874, 1164, 3).
+  
         bs = 1
-        hidden = (tf.zeros((bs, 512)), tf.zeros((bs, 512)))
+         
+        inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) # (b, seq_len, 12, 128, 256).
+        # labels = tf.convert_to_tensor(labels, dtype=tf.float32) # (b, 2*num_pts+1).
 
-    
-        for t in range(H):
+        input_past = inputs[:,:seq_len-1, :, :, :] # (b, seq_len-1, 12, 128, 256).
+        input_cur = inputs[:,seq_len-1, :, :, :] # (b, 12, 128, 256).
 
-            # progress_bar.update(1)        
-            
-            inputs = seq_inputs[:, t, :, :, :] # (1, 12, 128, 256).
-            labels = seq_labels[:, t, :] # (1, 2*num_pts+1).
+      
+        feature_past = tf.map_fn(model.extract_feature, input_past) # (b, seq_len-1, 768).             
+ 
+        traj_pred = model(input_cur, feature_past)[0] # (2*num_pts+1). 
 
-             
-            inputs_t = tf.convert_to_tensor(inputs, dtype=tf.float32) 
-            labels_t = tf.convert_to_tensor(labels, dtype=tf.float32) # (1, 2*num_pts+1).
-                                
-            pred_cls, pred_trajectory, hidden = model(inputs_t, hidden) # (1, M), (1, M, 2*num_pts+1), .                
-
-            pred_cls = pred_cls.numpy()[0] # (M,).
-            pred_trajectory = pred_trajectory.numpy()[0] # (M, 2*num_pts+1).
-            
-            idx = np.argmax(pred_cls)
-            traj_pred = pred_trajectory[idx] # (2*num_pts+1,).
-
-            # metrics = get_val_metric(pred_cls,  # (M,) np.
-            #                     pred_trajectory, # (M, 2*num_pts+1) np.
-            #                     labels[0] # (2*num_pts+1) np.
-            #                     )
         
+        plot_outs(labels[0], traj_pred, RGBs[0], dir_name=f'output/val', file_name=f'{i}.png')
+     
 
-            if(t%5==0):
-                frame = RGBs[0, t] # (874, 1164, 3).
-                                    
-                plot_outs(labels[0], traj_pred, frame, dir_name=f'output/val/{i}', file_name=f'{t}.png')
-          
+        del labels, RGBs
 
+        print(f'\rvalidating {i+1} / {n}', end="")
 
-        del seq_inputs, seq_labels, RGBs
-    
+    print()    
 
 
 
@@ -382,8 +358,10 @@ bstep = bs//args.accum_steps
 
 for epoch in range(args.epochs):
  
-
-    for epid, data in enumerate(train_dataloader):  
+    
+    validate()
+        
+    for epid, data in enumerate(train_dataloader):   
 
         inputs, labels = data # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1). 
           
@@ -404,9 +382,10 @@ for epoch in range(args.epochs):
             
             # print(f'input_past_mb.shape: {input_past_mb.shape}, aidx: {aidx}, bs: {bs}')
 
-            with tf.GradientTape() as tape: 
+            feature_past = tf.map_fn(model.extract_feature, input_past_mb) # (b, seq_len-1, 768).             
 
-                feature_past = tf.map_fn(model.extract_feature, input_past_mb) # (b, seq_len-1, 768).             
+            with tf.GradientTape() as tape:  
+
                 pred_trajectory = model(input_cur_mb, feature_past) # (b, 2*num_pts+1). 
                 loss = loss_fn(pred_trajectory, labels_mb) # (,), (,).
 
@@ -425,14 +404,11 @@ for epoch in range(args.epochs):
             print(log)
             with open("train.txt", "a") as f: f.write(log + '\n')
            
- 
-        # if epid % args.val_interval == 0:
-        #     validate()
- 
+
 
         if epid % args.save_interval == 0:
-            model.save_weights(f'ckpt/DD-{epid}.h5')
-            print(f'saved ckpt: ckpt/DD-{epid}.h5')
+            model.save_weights(f'ckpt/DDViVit-{epid}.h5')
+            print(f'saved ckpt: ckpt/DDViVit-{epid}.h5')
 
 
 

@@ -38,14 +38,14 @@ train_args = AttrDict({
         'lr': 0.0001,   
         'num_pts': 192,
         
-        'horizon': 512,
+        'horizon': 1024,
         'horizon_val': 128,
 
-        'ckpt': [None, f'ckpt/DD-160.h5'][0],
+        'ckpt': [None, f'ckpt/DD-1700.h5'][1],
         
-        'save_interval': 25,
+        'save_interval': 100,
         'log_interval': 8,
-        'val_interval': 25
+        'val_interval': 100
 
     }) 
  
@@ -57,7 +57,7 @@ transformerEncoder_args = AttrDict({
         "hidden_size": 512, 
         "dropout_rate": 0.0, 
         "mlp_dim": 1024,
-        "seq_len": 2
+        "seq_len": 16
     })
 
  
