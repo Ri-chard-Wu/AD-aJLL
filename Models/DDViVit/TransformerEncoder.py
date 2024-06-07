@@ -6,7 +6,9 @@ import tensorflow as tf
   
 import numpy as np
 
-from parameters import transformerEncoder_args as args
+from parameter import transformerEncoder_args as args
+
+from einops.layers.tensorflow import Rearrange
 
 
 class AttrDict(dict):
@@ -181,7 +183,7 @@ class Encoder1DBlock(tf.keras.layers.Layer):
 class TransformerEncoder(tf.keras.layers.Layer): # Transformer's encoder part only.
  
     def __init__(self, **kwarg):
-        super(Transformer, self).__init__(**kwarg)
+        super(TransformerEncoder, self).__init__(**kwarg)
 
 
     def build(self, input_shape):

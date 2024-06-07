@@ -32,7 +32,7 @@ class AttrDict(dict):
 train_args = AttrDict({
        
         'batch_size': 8, 
-        'accum_steps': 4,        
+        'accum_steps': 8,        
         'epochs': 100000,  
         
         'lr': 0.0001,   
@@ -52,12 +52,12 @@ train_args = AttrDict({
 
   
 transformerEncoder_args = AttrDict({ 
-        "heads":12,  
-        "depth":4, # transformer's layer number 
-        "hidden_size": 768, 
+        "heads":8,  
+        "depth":2, # transformer's layer number 
+        "hidden_size": 512, 
         "dropout_rate": 0.0, 
-        "mlp_dim": 3072,
-        "seq_len": 32
+        "mlp_dim": 1024,
+        "seq_len": 2
     })
 
  

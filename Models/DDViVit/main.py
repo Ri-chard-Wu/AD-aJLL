@@ -18,8 +18,8 @@ import pickle
 from cameraB3 import transform_img, eon_intrinsics, medmodel_intrinsics, draw_path
  
  
-from parameters import train_args as args
-from parameters import transformerEncoder_args as enc_args
+from parameter import train_args as args
+from parameter import transformerEncoder_args as enc_args
 
 PATH_DISTANCE = 192
 LANE_OFFSET = 1.8
@@ -337,14 +337,20 @@ def validate(n=3):
 
 
 
- 
+
+
+
 model = SequencePlanningNetwork()
-model(tf.random.uniform((1, 12, 128, 256)), (tf.zeros((1, 512)), tf.zeros((1, 512))))
+model(tf.random.uniform((1, 12, 128, 256)), tf.random.uniform((1, enc_args.seq_len-1, enc_args.hidden_size)))
 if args.ckpt: 
     model.load_weights(args.ckpt)  # for retraining
     print(f'loaded ckpt: {args.ckpt}')
 
 
+
+
+# model.summary()
+# exit()
 # optimizer, lr_scheduler = model.configure_optimizers(args, model)
 
 optimizer = tf.keras.optimizers.SGD(learning_rate=args.lr,
@@ -372,7 +378,7 @@ bs = args.batch_size
 eps_len = args.horizon 
 seq_len = enc_args.seq_len
 n_seq = eps_len//seq_len
-
+bstep = bs//args.accum_steps
 
 for epoch in range(args.epochs):
  
@@ -389,12 +395,15 @@ for epoch in range(args.epochs):
 
         accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
 
+
         for aidx in range(args.accum_steps):
             
-            input_past_mb = input_past[aidx*bs:(aidx+1)*bs, ...]
-            input_cur_mb = input_cur[aidx*bs:(aidx+1)*bs, ...]
-            labels_mb = labels[aidx*bs:(aidx+1)*bs, ...]
+            input_past_mb = input_past[aidx*bstep:(aidx+1)*bstep, ...]
+            input_cur_mb = input_cur[aidx*bstep:(aidx+1)*bstep, ...]
+            labels_mb = labels[aidx*bstep:(aidx+1)*bstep, ...]
             
+            # print(f'input_past_mb.shape: {input_past_mb.shape}, aidx: {aidx}, bs: {bs}')
+
             with tf.GradientTape() as tape: 
 
                 feature_past = tf.map_fn(model.extract_feature, input_past_mb) # (b, seq_len-1, 768).             
@@ -417,8 +426,8 @@ for epoch in range(args.epochs):
             with open("train.txt", "a") as f: f.write(log + '\n')
            
  
-        if epid % args.val_interval == 0:
-            validate()
+        # if epid % args.val_interval == 0:
+        #     validate()
  
 
         if epid % args.save_interval == 0:

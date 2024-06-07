@@ -4,11 +4,11 @@ import tensorflow as tf
 from EfficientNet import EfficientNetB2
 from TransformerEncoder import TransformerEncoder
  
-from parameters import transformerEncoder_args as enc_args
+from parameter import transformerEncoder_args as enc_args
  
 
 class SequencePlanningNetwork(tf.keras.Model):
-    def __init__():
+    def __init__(self):
         super().__init__()
       
         num_pts = 192
@@ -29,7 +29,7 @@ class SequencePlanningNetwork(tf.keras.Model):
             tf.keras.layers.Conv2D(32, 1, padding='valid'),  # (b, 4, 8, 32).
             tf.keras.layers.BatchNormalization(axis=3), # (b, 4, 8, 32).
             tf.keras.layers.Flatten(), # (b, 1024).
-            tf.keras.layers.Dense(enc_args.hidden_size) # (b, 768).
+            tf.keras.layers.Dense(enc_args.hidden_size), # (b, 768).
             tf.keras.layers.ELU(),
         ]) # (b, 768).
   
@@ -62,7 +62,7 @@ class SequencePlanningNetwork(tf.keras.Model):
                                              dtype=tf.float32)
 
  
-    def extract_feature(self, x):
+    def extract_feature(self, x, training=True):
         '''
             x: (b or seq_len, 12, 128, 256).
         '''
@@ -73,7 +73,7 @@ class SequencePlanningNetwork(tf.keras.Model):
 
 
 
-    def temporal_attention(x):
+    def temporal_attention(self, x, training=True):
         '''
             x: (b, seq_len, 768).
         '''                                                    
@@ -84,12 +84,12 @@ class SequencePlanningNetwork(tf.keras.Model):
         # x = jnp.concatenate([cls, x], axis=1) # (b, 1+T, 768).
 
         shapes = tf.shape(x)
-        cls_tokens = tf.broadcast_to(self.cls_token,(shapes[0], 1 ,shapes[3]))
+        cls_tokens = tf.broadcast_to(self.cls_token,(shapes[0], 1 ,shapes[2]))
         x = tf.concat((cls_tokens, x), axis=1) # (b, 1+T, 768).
 
         x += self.pos_embedding
 
-        x = self.transformerEncoder(x, train=train) # (b, 1+T, 768).
+        x = self.transformerEncoder(x, training=training) # (b, 1+T, 768).
  
         x = x[:, 0] # (b, 768).
  
@@ -106,6 +106,9 @@ class SequencePlanningNetwork(tf.keras.Model):
         '''
 
         feature_cur = self.extract_feature(x)[:, None, :] # (b, 1, 768).
+
+        # print(f'feature_cur.shape: {feature_cur.shape}, features_past.shape: {features_past.shape}')
+
         x = tf.concat([feature_cur, features_past], axis=1) # (b, seq_len, 768).
 
         x = self.temporal_attention(x, training=training) # (b, 768).
