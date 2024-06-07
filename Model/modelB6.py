@@ -381,6 +381,7 @@ def get_model():
         })
       )
   fastvit.load_ckpt('ckpt', 'acc0p96.pkl')  
+  # img: (None, 128, 256, 12).
   x_to_RNNfk2fk3= fastvit(img) 
 
   out11 = RNN(x_to_RNNfk2fk3, in1, in2, in3)

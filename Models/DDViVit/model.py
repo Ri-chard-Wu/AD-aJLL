@@ -2,10 +2,11 @@
 
 import tensorflow as tf
 from EfficientNet import EfficientNetB2
+from FastVit import FastViT
 from TransformerEncoder import TransformerEncoder
  
 from parameter import transformerEncoder_args as enc_args
- 
+from parameter import AttrDict
 
 class SequencePlanningNetwork(tf.keras.Model):
     def __init__(self):
@@ -19,25 +20,33 @@ class SequencePlanningNetwork(tf.keras.Model):
             out shape: (b, 4, 8, 1408).
             ch format: last.
         '''        
-        self.backbone = EfficientNetB2()
+        # self.backbone = EfficientNetB2()
  
-
-        self.plan_head = tf.keras.Sequential([
-            # 6, 450, 800 -> 1408, 14, 25
-            # nn.AdaptiveMaxPool2d((4, 8)),  # 1408, 4, 8            
-            tf.keras.layers.BatchNormalization(axis=3), # 4, 8, 1408
-            tf.keras.layers.Conv2D(32, 1, padding='valid'),  # (b, 4, 8, 32).
-            tf.keras.layers.BatchNormalization(axis=3), # (b, 4, 8, 32).
-            tf.keras.layers.Flatten(), # (b, 1024).
-            tf.keras.layers.Dense(enc_args.hidden_size), # (b, 768).
-            tf.keras.layers.ELU(),
-        ]) # (b, 768).
+        self.backbone = FastViT(
+                AttrDict({
+                    'layers': [2, 2, 6, 2],
+                    'embed_dims': [64, 128, 256, 512],
+                    'token_mixers': ("repmixer", "repmixer", "repmixer", "repmixer"),
+                    'pos_embs': [None, None, None, None],
+                    'mlp_ratios': [3, 3, 3, 3],
+                    'downsamples': [True, True, True, True]
+                })
+            )
+        self.backbone.load_ckpt('ckpt', 'fastvit-acc0p96.pkl')  
   
-        self.gru = tf.keras.layers.Bidirectional(tf.keras.layers.GRU(512, return_state=True, return_sequences=True))
- 
+        for i, layer in enumerate(self.backbone.layers):
+            layer.trainable = False
+            print(f'[{i}] {layer.name}: layer.trainable = False')
+     
+        self.plan_head = tf.keras.Sequential([ 
+            tf.keras.layers.Dense(enc_args.hidden_size), # (b, hid_sz).
+            tf.keras.layers.ELU(),
+        ]) # (b, hid_sz).
+
+
         self.plan_head_tip = tf.keras.Sequential([
             # tf.keras.layers.Flatten(), 
-            tf.keras.layers.ELU(),  # (b, 768).
+            # tf.keras.layers.ELU(),  # (b, 768).
             tf.keras.layers.Dense(256, activation='relu'),  # (b, 256).
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(256, activation='relu'),
@@ -61,15 +70,16 @@ class SequencePlanningNetwork(tf.keras.Model):
                                              initializer=tf.keras.initializers.RandomNormal(),
                                              dtype=tf.float32)
 
- 
+    
     def extract_feature(self, x, training=True):
         '''
             x: (b or seq_len, 12, 128, 256).
         '''
-        features = self.backbone(x, training=training) # (b, 4, 8, 1408).
-        features = self.plan_head(features, training=training) # (b, 768).
-        return features # (b, 768).
-
+        x = tf.transpose(x, perm=[0,2,3,1]) # (b, 128, 256, 12).
+        features = self.backbone(x, training=training) # (b, 1024).
+ 
+        features = self.plan_head(features, training=training) # (b, hid_sz).
+        return features # (b, hid_sz).
 
 
 
@@ -77,12 +87,6 @@ class SequencePlanningNetwork(tf.keras.Model):
         '''
             x: (b, seq_len, 768).
         '''                                                    
-                        
-        # n, _, c = x.shape
-        # cls = self.param(f'cls_{encoder_name}', nn.initializers.zeros, (1, 1, c), x.dtype)
-        # cls = jnp.tile(cls, [n, 1, 1])
-        # x = jnp.concatenate([cls, x], axis=1) # (b, 1+T, 768).
-
         shapes = tf.shape(x)
         cls_tokens = tf.broadcast_to(self.cls_token,(shapes[0], 1 ,shapes[2]))
         x = tf.concat((cls_tokens, x), axis=1) # (b, 1+T, 768).
@@ -97,8 +101,7 @@ class SequencePlanningNetwork(tf.keras.Model):
 
 
 
-
-
+ 
     def call(self, x, features_past, training=True):
         '''
             x: (b, 12, 128, 256).
@@ -106,9 +109,7 @@ class SequencePlanningNetwork(tf.keras.Model):
         '''
 
         feature_cur = self.extract_feature(x)[:, None, :] # (b, 1, 768).
-
-        # print(f'feature_cur.shape: {feature_cur.shape}, features_past.shape: {features_past.shape}')
-
+ 
         x = tf.concat([feature_cur, features_past], axis=1) # (b, seq_len, 768).
 
         x = self.temporal_attention(x, training=training) # (b, 768).
@@ -142,23 +143,24 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
             traj_true: (b, 2*num_pts+1).
         '''        
 
-        path_true = traj_true[:, :self.num_pts] # (b, num_pts).
-        valid_len_true = tf.clip_by_value(traj_true[:, 2*self.num_pts], 5, self.num_pts-1) # (b,).
+        # path_true = traj_true[:, :self.num_pts] # (b, num_pts).
+        # valid_len_true = tf.clip_by_value(traj_true[:, 2*self.num_pts], 5, self.num_pts-1) # (b,).
         
-        L = tf.cast(valid_len_true, dtype=tf.int32) # (b,).
+        # L = tf.cast(valid_len_true, dtype=tf.int32) # (b,).
 
-        path_pred = traj_pred[:, :self.num_pts] # (b, num_pts).
-        valid_len_pred = tf.clip_by_value(traj_pred[:, 2*self.num_pts], 5, self.num_pts-1) # (b,).
+        # path_pred = traj_pred[:, :self.num_pts] # (b, num_pts).
+        # valid_len_pred = tf.clip_by_value(traj_pred[:, 2*self.num_pts], 5, self.num_pts-1) # (b,).
         
-        valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
+        # valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
  
-        reg_loss = self.reg_loss(path_true, path_pred) # (b,). 
-        reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
+        # reg_loss = self.reg_loss(path_true, path_pred) # (b,). 
+        # reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
         
-        return reg_loss + valid_len_loss # (,), (,).
+        # return reg_loss + valid_len_loss # (,), (,).
 
-
-      
+        reg_loss = self.reg_loss(traj_true, traj_pred) # (b,). 
+        reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
+        return reg_loss
  
     # def call(self, pred_traj, gt, training=True):
     #     '''

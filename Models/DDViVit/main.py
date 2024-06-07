@@ -107,17 +107,84 @@ def read_frames(hevc_file):
  
   
 
+# def get_train_dataloader(pkl_files):
+  
+#     hevc_files = [pkl_file.replace('data.pkl', 'fcamera.hevc') for pkl_file in pkl_files]    
+
+#     H = args.horizon 
+#     B = args.batch_size
+#     n_B = len(pkl_files) // B 
+          
+#     seq_len = enc_args.seq_len
+
+#     fidx = 0
+
+#     while(1):  
+        
+#         X0 = np.zeros((B, H, 12, 128, 256), dtype=np.uint8)            
+#         X3 = np.zeros((B, H, 512), dtype=np.float32)    
+#         Y = [np.zeros((B, H, s)) for s in Y_shape]
+
+#         for bidx in range(B):
+            
+#             while(1):
+#                 pkl_file = pkl_files[fidx]
+#                 hevc_file = hevc_files[fidx]                    
+#                 frames = read_frames(hevc_file) 
+
+#                 fidx += 1
+#                 if(fidx >= len(pkl_files)): fidx = 0
+
+#                 if(len(frames)-H > 0):  
+#                     break
+#                 else:
+#                     print(f'[Warning] len(frames)-H <= 0): {hevc_file}')                        
+#                     continue
+            
+#             t0 = np.random.choice(np.arange(len(frames)-H), size=1)[0]
+#             frames = frames[t0:t0+H+1]
+
+#             with open(pkl_file, 'rb') as f:      
+
+#                 data = pickle.load(f)   
+#                 assert data['Xin3'].shape[1] == 512
+                    
+#                 for i in range(12):
+#                     assert data['Y'][i].shape[1] == Y_shape[i]
+
+#             for t in range(H):   
+    
+#                 X0[bidx, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
+#                 X3[bidx, t] = data['Xin3'][t0+t]
+#                 for j in range(12):
+#                     Y[j][bidx, t] = data['Y'][j][t0+t]
+
+#             print(f'\rsampling training data {bidx+1} / {B}', end="")
+
+#         print()
+#         for t in range(0, H-seq_len): 
+#             yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1, :] # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1).
+            
+#         del X0, Y
+
+ 
+
+
+
 def get_train_dataloader(pkl_files):
   
     hevc_files = [pkl_file.replace('data.pkl', 'fcamera.hevc') for pkl_file in pkl_files]    
 
-    H = args.horizon 
+    # H = args.horizon 
+    H = 256
     B = args.batch_size
     n_B = len(pkl_files) // B 
-          
-    seq_len = enc_args.seq_len
+    seq_len = enc_args.seq_len # 32.
+    frame_skip = 4
+    seq_skip = seq_len // 2 # 16.
 
     fidx = 0
+    epoch = 0
 
     while(1):  
         
@@ -125,49 +192,55 @@ def get_train_dataloader(pkl_files):
         X3 = np.zeros((B, H, 512), dtype=np.float32)    
         Y = [np.zeros((B, H, s)) for s in Y_shape]
 
+        print(f'epoch{epoch}, file {fidx+1} / {len(pkl_files)}')
+
         for bidx in range(B):
             
             while(1):
                 pkl_file = pkl_files[fidx]
                 hevc_file = hevc_files[fidx]                    
                 frames = read_frames(hevc_file) 
+                frames = frames[::frame_skip]
 
                 fidx += 1
-                if(fidx >= len(pkl_files)): fidx = 0
+                if(fidx >= len(pkl_files)): 
+                    fidx = 0
+                    epoch += 1
 
-                if(len(frames)-H > 0):  
+                if(len(frames) > H):  
                     break
                 else:
-                    print(f'[Warning] len(frames)-H <= 0): {hevc_file}')                        
+                    print(f'[Warning] len(frames) too small): {hevc_file}')                        
                     continue
+             
             
-            t0 = np.random.choice(np.arange(len(frames)-H), size=1)[0]
-            frames = frames[t0:t0+H+1]
-
             with open(pkl_file, 'rb') as f:      
 
                 data = pickle.load(f)   
-                assert data['Xin3'].shape[1] == 512
-                    
                 for i in range(12):
                     assert data['Y'][i].shape[1] == Y_shape[i]
 
+            for j in range(12):
+                data['Y'][j] = data['Y'][j][::frame_skip]
+                
             for t in range(H):   
     
-                X0[bidx, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
-                X3[bidx, t] = data['Xin3'][t0+t]
+                X0[bidx, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))                
                 for j in range(12):
-                    Y[j][bidx, t] = data['Y'][j][t0+t]
+                    Y[j][bidx, t] = data['Y'][j][t]
 
             print(f'\rsampling training data {bidx+1} / {B}', end="")
 
         print()
-        for t in range(0, H-seq_len): 
+
+        for t in range(0, H-seq_len, seq_skip): 
             yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1, :] # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1).
             
-        del X0, Y
+        del X0, Y, X3, data
 
  
+
+
 
 
 def get_val_dataloader(pkl_files):
@@ -257,15 +330,15 @@ def plot_outs(traj_true, # (2*num_pts+1,).
 
     # ----------------------- 
     plt.subplot(221) # 221: 2 rows, 2 columns, 1st sub-figure 
-    l = int(valid_len_true)    
-    plt.imshow(draw_path(frame.copy(), path_true[:l], x_lspace[:l])) 
-    plt.title(f"true, l: {l}")
+    l_true = int(valid_len_true)    
+    plt.imshow(draw_path(frame.copy(), path_true[:l_true], x_lspace[:l_true])) 
+    plt.title(f"true, l: {l_true}")
 
     # ----------------------- 
     plt.subplot(222)   
-    l = int(valid_len_pred)    
-    plt.imshow(draw_path(frame.copy(), path_pred[:l], x_lspace[:l]))  
-    plt.title(f"pred, l: {l}")
+    l_pred = int(valid_len_pred)    
+    plt.imshow(draw_path(frame.copy(), path_pred[:l_true], x_lspace[:l_true]))  
+    plt.title(f"pred, l: {l_pred}")
 
     # ----------------------- 
 
@@ -277,7 +350,7 @@ def plot_outs(traj_true, # (2*num_pts+1,).
  
 
 
-def validate(n=64):
+def validate(n=16):
   
     seq_len = enc_args.seq_len
         
@@ -287,14 +360,12 @@ def validate(n=64):
  
 
         inputs, labels, RGBs = data # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1), (1, 874, 1164, 3).
-  
-        bs = 1
-         
-        inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) # (b, seq_len, 12, 128, 256).
+
+        inputs_t = tf.convert_to_tensor(inputs, dtype=tf.float32) # (b, seq_len, 12, 128, 256).
         # labels = tf.convert_to_tensor(labels, dtype=tf.float32) # (b, 2*num_pts+1).
 
-        input_past = inputs[:,:seq_len-1, :, :, :] # (b, seq_len-1, 12, 128, 256).
-        input_cur = inputs[:,seq_len-1, :, :, :] # (b, 12, 128, 256).
+        input_past = inputs_t[:,:seq_len-1, :, :, :] # (b, seq_len-1, 12, 128, 256).
+        input_cur = inputs_t[:,seq_len-1, :, :, :] # (b, 12, 128, 256).
 
       
         feature_past = tf.map_fn(model.extract_feature, input_past) # (b, seq_len-1, 768).             
@@ -305,7 +376,7 @@ def validate(n=64):
         plot_outs(labels[0], traj_pred, RGBs[0], dir_name=f'output/val', file_name=f'{i}.png')
      
 
-        del labels, RGBs
+        del labels, inputs, RGBs
 
         print(f'\rvalidating {i+1} / {n}', end="")
 
@@ -357,9 +428,6 @@ n_seq = eps_len//seq_len
 bstep = bs//args.accum_steps
 
 for epoch in range(args.epochs):
- 
-    
-    validate()
         
     for epid, data in enumerate(train_dataloader):   
 
@@ -379,13 +447,10 @@ for epoch in range(args.epochs):
             input_past_mb = input_past[aidx*bstep:(aidx+1)*bstep, ...]
             input_cur_mb = input_cur[aidx*bstep:(aidx+1)*bstep, ...]
             labels_mb = labels[aidx*bstep:(aidx+1)*bstep, ...]
-            
-            # print(f'input_past_mb.shape: {input_past_mb.shape}, aidx: {aidx}, bs: {bs}')
 
             feature_past = tf.map_fn(model.extract_feature, input_past_mb) # (b, seq_len-1, 768).             
 
             with tf.GradientTape() as tape:  
-
                 pred_trajectory = model(input_cur_mb, feature_past) # (b, 2*num_pts+1). 
                 loss = loss_fn(pred_trajectory, labels_mb) # (,), (,).
 
@@ -398,13 +463,15 @@ for epoch in range(args.epochs):
         optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
 
      
- 
+
         if epid % args.log_interval == 0:
             log = f'[{epoch}-{epid}] loss: {loss.numpy()}'
             print(log)
             with open("train.txt", "a") as f: f.write(log + '\n')
            
 
+        if epid % args.val_interval == 0:
+            validate()
 
         if epid % args.save_interval == 0:
             model.save_weights(f'ckpt/DDViVit-{epid}.h5')

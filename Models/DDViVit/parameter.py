@@ -31,17 +31,17 @@ class AttrDict(dict):
 
 train_args = AttrDict({
        
-        'batch_size': 8, 
-        'accum_steps': 8,        
+        'batch_size': 24, 
+        'accum_steps': 24,        
         'epochs': 100000,  
         
         'lr': 0.0001,   
         'num_pts': 192,
         
-        'horizon': 1024,
+        'horizon': 512,
         'horizon_val': 128,
 
-        'ckpt': [None, f'ckpt/DD-1700.h5'][1],
+        'ckpt': [None, f'ckpt/DD-1700.h5'][0],
         
         'save_interval': 100,
         'log_interval': 8,
@@ -57,7 +57,7 @@ transformerEncoder_args = AttrDict({
         "hidden_size": 512, 
         "dropout_rate": 0.0, 
         "mlp_dim": 1024,
-        "seq_len": 16
+        "seq_len": 32
     })
 
  
