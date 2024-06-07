@@ -248,6 +248,8 @@ def get_val_dataloader(pkl_files):
     hevc_files = [pkl_file.replace('data.pkl', 'fcamera.hevc') for pkl_file in pkl_files]    
 
     H = args.horizon_val
+    seq_len = enc_args.seq_len
+    frame_skip = 4
   
     while(1):
 
@@ -256,45 +258,47 @@ def get_val_dataloader(pkl_files):
         hevc_file = hevc_files[idx]
 
         RGBs = np.zeros((1, H, 874, 1164, 3), dtype=np.uint8) # for debug.
-        X0 = np.zeros((1, H, 12, 128, 256), dtype=np.uint8)   
-        X3 = np.zeros((1, H, 512), dtype=np.float32)             
+        X0 = np.zeros((1, H, 12, 128, 256), dtype=np.uint8)            
         Y = [np.zeros((1, H, s)) for s in Y_shape]
      
         frames = read_frames(hevc_file) 
-        
-        if(len(frames)-H <= 0): 
+
+        frames = frames[::frame_skip]
+
+
+        # if(len(frames) <= H):  
+ 
+        if(len(frames) <= H): 
             print(f'[Warning] len(frames)-H <= 0): {hevc_file}')
             continue
 
-        t0 = np.random.choice(np.arange(len(frames)-H), size=1)[0]
- 
-        frames = frames[t0:t0+H+1]
+   
  
         with open(pkl_file, 'rb') as f:      
 
             data = pickle.load(f)    
-            assert data['Xin3'].shape[1] == 512
+            
             for i in range(12):
                 assert data['Y'][i].shape[1] == Y_shape[i]
 
+        for j in range(12):
+            data['Y'][j] = data['Y'][j][::frame_skip]
+            
+            
         for t in range(H):   
 
             RGBs[0, t] = cv2.cvtColor(frames[t], cv2.COLOR_BGR2RGB)
-
-            X3[0, t] = data['Xin3'][t0+t]
             X0[0, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
 
             for j in range(12):
-                Y[j][0, t] = data['Y'][j][t0+t]
+                Y[j][0, t] = data['Y'][j][t]
 
 
         skip = 32
-        for t in range(0, H-enc_args.seq_len, skip): 
-            yield X0[:, t:t+enc_args.seq_len, :, :, :], Y[0][:, t+enc_args.seq_len-1, :], RGBs[:, t+enc_args.seq_len-1, :, :, :] # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1), (1, 874, 1164, 3).
-            
-        # yield X0, Y[0], RGBs
+        for t in range(0, H-seq_len, skip): 
+            yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1, :], RGBs[:, t+seq_len-1, :, :, :] # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1), (1, 874, 1164, 3).        
 
-        del X0, X3, Y, RGBs
+        del X0, Y, RGBs, data
 
   
 
