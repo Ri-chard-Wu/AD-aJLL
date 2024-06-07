@@ -21,6 +21,7 @@ import utils_comma2k19.coordinates as coord
 
 
 
+
 class PlanningDataset(Dataset):
     def __init__(self, root='data', json_path_pattern='p3_%s.json', split='train'):
         self.samples = json.load(open(os.path.join(root, json_path_pattern % split)))
