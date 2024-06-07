@@ -35,12 +35,13 @@ class SequencePlanningNetwork(tf.keras.Model):
         self.backbone.load_ckpt('ckpt', 'fastvit-acc0p96.pkl')  
   
         for i, layer in enumerate(self.backbone.layers):
+            if layer.name == 'yuv2rgb': continue
             layer.trainable = False
             print(f'[{i}] {layer.name}: layer.trainable = False')
      
         self.plan_head = tf.keras.Sequential([ 
             tf.keras.layers.Dense(enc_args.hidden_size), # (b, hid_sz).
-            tf.keras.layers.ELU(),
+            tf.keras.layers.ReLU(),
         ]) # (b, hid_sz).
 
 
@@ -51,7 +52,7 @@ class SequencePlanningNetwork(tf.keras.Model):
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(128, activation='relu'), 
-            tf.keras.layers.Dense(num_pts * 2 + 1)
+            tf.keras.layers.Dense(num_pts)
         ]) 
  
         # self.feature_sequence = deque(maxlen=100) # most recent 100 frames as input to transformer encoder.
