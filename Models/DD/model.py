@@ -68,7 +68,7 @@ class SequencePlanningNetwork(tf.keras.Model):
 
         raw_preds = self.plan_head_tip(raw_preds, training=training) # (b, M+M*(2*num_pts+1)).
 
-        pred_cls = tf.nn.softmax(raw_preds[:, :self.M]) # (b, 5).
+        pred_cls = tf.nn.softmax(raw_preds[:, :self.M], axis=-1) # (b, 5).
 
         pred_traj = tf.reshape(raw_preds[:, self.M:],\
                              (-1, self.M, 2*self.num_pts+1)) # (b, 5, 2*num_pts+1).
@@ -94,9 +94,9 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         
         super().__init__()
 
-        self.alpha = alpha  # TODO: currently no use
+
         self.M = M
-        self.num_pts = num_pts
+        self.num_pts = num_pts # 192.
          
         self.cls_loss = tf.keras.losses.CategoricalCrossentropy(reduction='none')        
         # self.reg_loss = nn.SmoothL1Loss(reduction='none')
@@ -112,11 +112,11 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         '''        
 
         path_gt = gt[:, :self.num_pts] # (b, num_pts).
-        valid_len_gt = tf.clip_by_value(gt[:, 2*self.num_pts], 5, 192-1) # (b,).
+        valid_len_gt = tf.clip_by_value(gt[:, 2*self.num_pts], 5, self.num_pts-1) # (b,).
         L = tf.cast(valid_len_gt, dtype=tf.int32) # (b,).
 
         path_pred = pred_traj[:, :, :self.num_pts] # (b, 5, num_pts).
-        valid_len_pred = tf.clip_by_value(pred_traj[:, :, 2*self.num_pts], 5, 192-1) # (b, 5).
+        valid_len_pred = tf.clip_by_value(pred_traj[:, :, 2*self.num_pts], 5, self.num_pts-1) # (b, 5).
 
         
 
@@ -150,7 +150,7 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         path_pred = tf.gather_nd(path_pred, sel) # (b, num_pts).
 
         valid_len_pred = tf.gather_nd(valid_len_pred, sel) # (b,).
-        valid_len_loss = self.reg_loss(valid_len_gt, valid_len_pred) # (b,).
+        valid_len_loss = self.reg_loss(valid_len_gt, valid_len_pred) # (,).
 
         gt_cls_onehot = tf.one_hot(gt_cls, M) # (b, 5).
         cls_loss = self.cls_loss(gt_cls_onehot, pred_cls_prob) # (b,).
@@ -159,25 +159,7 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
 
         cls_loss = tf.math.reduce_mean(cls_loss, axis=0) # (,).
         reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
+        # valid_len_loss = tf.math.reduce_mean(valid_len_loss, axis=0) # (,).
 
-        return cls_loss, reg_loss # (,), (,).
+        return cls_loss, reg_loss, valid_len_loss # (,), (,).
 
-
- 
-
-if __name__ == '__main__':
-    # model = EfficientNet.from_pretrained('efficientnet-b2', in_channels=6)
-    model = PlaningNetwork(M=3, num_pts=20)
-
-    dummy_input = torch.zeros((1, 6, 256, 512))
-
-    # features = model.extract_features(dummy_input)
-    features = model(dummy_input)
-
-    pred_cls = torch.rand(16, 5)
-    pred_trajectory = torch.rand(16, 5*20*3)
-    gt = torch.rand(16, 20, 3)
-
-    loss = MultipleTrajectoryPredictionLoss(1.0, 5, 20)
-
-    loss(pred_cls, pred_trajectory, gt)

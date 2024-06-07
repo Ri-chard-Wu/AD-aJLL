@@ -62,15 +62,11 @@ args = AttrDict({
         'epochs': 100000,  
         'log_per_n_step': 20, 
         'lr': 0.0001, 
-        'mtp_alpha': 1.0, 
-        'n_workers': 4, 
-        'num_pts': 33, 
+        'mtp_alpha': 1.0,  
         'optimize_per_n_step': 32, 
-        'optimizer': 'sgd', 
-        'resume': '', 
-        'sync_bn': True, 
-        'tqdm': False, 
-        'val_per_n_epoch': 1,
+           
+        'num_pts': 192,
+        
         'horizon': 128,
         'horizon_val': 128,
 
@@ -453,9 +449,9 @@ for epoch in range(args.epochs):
 
                     pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
                     
-                    cls_loss, reg_loss = loss_fn(pred_cls, pred_trajectory, labels) # (,), (,).
+                    cls_loss, reg_loss, valid_len_loss = loss_fn(pred_cls, pred_trajectory, labels) # (,), (,).
 
-                    loss += (cls_loss + args.mtp_alpha * reg_loss) / H1 # "/H1" may cause error.
+                    loss += (cls_loss + args.mtp_alpha * reg_loss + valid_len_loss) / H1 # "/H1" may cause error.
 
             # print(f'[{epoch}-{epid}-{t1}] loss: {loss}')
             
@@ -464,8 +460,6 @@ for epoch in range(args.epochs):
             for i in range(len(accum_gradients[t1])):
                 accum_gradients[t1][i] += grad[i]
                 
-
-            # optimizer.apply_gradients(zip(grad, model.trainable_variables))
             losses.append(loss.numpy())
             
             hidden = [tf.convert_to_tensor(hidden[0].numpy(), dtype=tf.float32),
