@@ -34,11 +34,33 @@ class SequencePlanningNetwork(tf.keras.Model):
             )
         self.backbone.load_ckpt('ckpt', 'fastvit-acc0p96.pkl')  
   
-        for i, layer in enumerate(self.backbone.layers):
-            if layer.name == 'yuv2rgb': continue
-            layer.trainable = False
-            print(f'[{i}] {layer.name}: layer.trainable = False')
+        # # for i, layer in enumerate(self.backbone.layers):
+        # #     if layer.name == 'yuv2rgb': continue
+        # #     layer.trainable = False
+        # #     print(f'[{i}] {layer.name}: layer.trainable = False')
      
+
+
+
+        # self.backbone = tf.keras.Sequential([ 
+        #             tf.keras.layers.Conv2D(filters=64, kernel_size=8, strides=5),
+        #             tf.keras.layers.ReLU(),
+        #             tf.keras.layers.Conv2D(filters=128, kernel_size=5, strides=3),
+        #             tf.keras.layers.ReLU(), 
+        #             tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1),
+        #             tf.keras.layers.ReLU(),
+        #             tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1),
+        #             tf.keras.layers.ReLU(),
+        #             tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1),
+        #             tf.keras.layers.ReLU(),
+        #             tf.keras.layers.Flatten(),
+        #             tf.keras.layers.Dense(1024),
+        #             tf.keras.layers.ReLU()
+        #         ])
+
+
+  
+
         self.plan_head = tf.keras.Sequential([ 
             tf.keras.layers.Dense(enc_args.hidden_size), # (b, hid_sz).
             tf.keras.layers.ReLU(),
@@ -46,30 +68,30 @@ class SequencePlanningNetwork(tf.keras.Model):
 
 
         self.plan_head_tip = tf.keras.Sequential([
-            # tf.keras.layers.Flatten(), 
+            tf.keras.layers.Flatten(), 
             # tf.keras.layers.ELU(),  # (b, 768).
             tf.keras.layers.Dense(256, activation='relu'),  # (b, 256).
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(128, activation='relu'), 
-            tf.keras.layers.Dense(num_pts)
+            tf.keras.layers.Dense(2*num_pts+1)
         ]) 
  
         # self.feature_sequence = deque(maxlen=100) # most recent 100 frames as input to transformer encoder.
  
         self.transformerEncoder = TransformerEncoder()
         
-        self.cls_token = self.add_weight("cls",
-                                         shape=[1,
-                                                1,
-                                                enc_args.hidden_size],
-                                         initializer=tf.keras.initializers.RandomNormal(),
-                                         dtype=tf.float32)
+        # self.cls_token = self.add_weight("cls",
+        #                                  shape=[1,
+        #                                         1,
+        #                                         enc_args.hidden_size],
+        #                                  initializer=tf.keras.initializers.RandomNormal(),
+        #                                  dtype=tf.float32)
 
-        self.pos_embedding = self.add_weight("Transformer/posembed_input/pos_embedding",
-                                             shape=[1, enc_args.seq_len + 1, enc_args.hidden_size],
-                                             initializer=tf.keras.initializers.RandomNormal(),
-                                             dtype=tf.float32)
+        # self.pos_embedding = self.add_weight("Transformer/posembed_input/pos_embedding",
+        #                                      shape=[1, enc_args.seq_len + 1, enc_args.hidden_size],
+        #                                      initializer=tf.keras.initializers.RandomNormal(),
+        #                                      dtype=tf.float32)
 
     
     def extract_feature(self, x, training=True):
@@ -78,7 +100,10 @@ class SequencePlanningNetwork(tf.keras.Model):
         '''
         x = tf.transpose(x, perm=[0,2,3,1]) # (b, 128, 256, 12).
         features = self.backbone(x, training=training) # (b, 1024).
+
+
  
+
         features = self.plan_head(features, training=training) # (b, hid_sz).
         return features # (b, hid_sz).
 
@@ -111,11 +136,11 @@ class SequencePlanningNetwork(tf.keras.Model):
 
         feature_cur = self.extract_feature(x)[:, None, :] # (b, 1, 768).
  
-        x = tf.concat([feature_cur, features_past], axis=1) # (b, seq_len, 768).
+        # x = tf.concat([feature_cur, features_past], axis=1) # (b, seq_len, 768).
 
-        x = self.temporal_attention(x, training=training) # (b, 768).
+        # x = self.temporal_attention(x, training=training) # (b, 768).
 
-        x = self.plan_head_tip(x, training=training) # (b, 2*num_pts+1).
+        x = self.plan_head_tip(feature_cur, training=training) # (b, 2*num_pts+1).
 
 
         return x # (b, 2*num_pts+1).
@@ -144,25 +169,33 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
             traj_true: (b, 2*num_pts+1).
         '''        
 
-        # path_true = traj_true[:, :self.num_pts] # (b, num_pts).
-        # valid_len_true = tf.clip_by_value(traj_true[:, 2*self.num_pts], 5, self.num_pts-1) # (b,).
-        
-        # L = tf.cast(valid_len_true, dtype=tf.int32) # (b,).
+        path_true = traj_true[:, :self.num_pts] # (b, num_pts).
+        valid_len_true = tf.clip_by_value(traj_true[:, 2*self.num_pts], 5, self.num_pts) # (b,). 
 
-        # path_pred = traj_pred[:, :self.num_pts] # (b, num_pts).
-        # valid_len_pred = tf.clip_by_value(traj_pred[:, 2*self.num_pts], 5, self.num_pts-1) # (b,).
+        b = path_true.shape[0]
+        L = tf.cast(valid_len_true, dtype=tf.int32)[:, None] # (b, 1).
+        s = tf.convert_to_tensor([[i for i in range(1, self.num_pts+1)]]*b) # (b, num_pts).
+        mask = tf.cast(s < L, tf.float32) # (b, num_pts).
         
-        # valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
- 
-        # reg_loss = self.reg_loss(path_true, path_pred) # (b,). 
-        # reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
-        
-        # return reg_loss + valid_len_loss # (,), (,).
 
-        reg_loss = self.reg_loss(traj_true, traj_pred) # (b,). 
+        path_pred = traj_pred[:, :self.num_pts] # (b, num_pts).
+        valid_len_pred = tf.clip_by_value(traj_pred[:, 2*self.num_pts], 5, self.num_pts) # (b,).
+        
+        valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
+        
+        reg_loss = self.reg_loss(path_true*mask, path_pred*mask) # (b,). 
         reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
-        return reg_loss
+
+        return reg_loss + 0.1*valid_len_loss # (,), (,).
  
+ 
+        # reg_loss = tf.math.reduce_mean(((path_true-path_pred)**2)*mask, axis=1) # (,).
+        # reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
+
+        # return reg_loss
+ 
+
+
     # def call(self, pred_traj, gt, training=True):
     #     '''
     #         pred_cls_prob: (b, 5), 

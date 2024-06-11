@@ -227,8 +227,8 @@ def draw_path(img, path, x_lspace):
 
     # x: front-back, y: left-right.
     # x: fixed interval (1 meter?).
-    new_xl_path, new_yl_path = zip(*[transform_point(x_lspace[i], path[i]-1) for i in range(len(path))][4:])
-    new_xr_path, new_yr_path = zip(*[transform_point(x_lspace[i], path[i]+1) for i in range(len(path))][4:])
+    new_xl_path, new_yl_path = zip(*[transform_point(x_lspace[i], path[i]-1) for i in range(len(path))])
+    new_xr_path, new_yr_path = zip(*[transform_point(x_lspace[i], path[i]+1) for i in range(len(path))])
 
 
     fill_color=(128,0,255)

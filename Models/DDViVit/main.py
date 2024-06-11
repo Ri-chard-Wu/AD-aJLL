@@ -181,7 +181,9 @@ def get_train_dataloader(pkl_files):
     n_B = len(pkl_files) // B 
     seq_len = enc_args.seq_len # 32.
     frame_skip = 4
-    seq_skip = seq_len // 2 # 16.
+    
+    # seq_skip = seq_len // 2 # 16.
+    seq_skip = 1
 
     fidx = 0
     epoch = 0
@@ -234,7 +236,8 @@ def get_train_dataloader(pkl_files):
         print()
 
         for t in range(0, H-seq_len, seq_skip): 
-            yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1, :args.num_pts] # (b, seq_len, 12, 128, 256), (b, num_pts).
+            # yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1, :args.num_pts] # (b, seq_len, 12, 128, 256), (b, num_pts).
+            yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1] # (b, seq_len, 12, 128, 256), (b, num_pts).
             
         del X0, Y, X3, data
 
@@ -296,7 +299,7 @@ def get_val_dataloader(pkl_files):
 
         skip = 32
         for t in range(0, H-seq_len, skip): 
-            yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1, :args.num_pts], RGBs[:, t+seq_len-1, :, :, :] # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1), (1, 874, 1164, 3).        
+            yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1], RGBs[:, t+seq_len-1, :, :, :] # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1), (1, 874, 1164, 3).        
 
         del X0, Y, RGBs, data
 
@@ -320,11 +323,11 @@ def plot_outs(traj_true, # (2*num_pts+1,).
     
     path_true = traj_true[:PATH_DISTANCE]
     # path_std_true = traj_true[PATH_DISTANCE:2*PATH_DISTANCE]
-    # valid_len_true = np.fmin(PATH_DISTANCE, np.fmax(5, traj_true[2*PATH_DISTANCE]))
+    valid_len_true = np.fmin(PATH_DISTANCE, np.fmax(5, traj_true[2*PATH_DISTANCE]))
  
     path_pred = traj_pred[:PATH_DISTANCE]
     # path_std_pred = traj_pred[PATH_DISTANCE:2*PATH_DISTANCE]
-    # valid_len_pred = np.fmin(PATH_DISTANCE, np.fmax(5, traj_pred[2*PATH_DISTANCE]))
+    valid_len_pred = np.fmin(PATH_DISTANCE, np.fmax(5, traj_pred[2*PATH_DISTANCE]))
 
 
 
@@ -334,15 +337,15 @@ def plot_outs(traj_true, # (2*num_pts+1,).
 
     # ----------------------- 
     plt.subplot(221) # 221: 2 rows, 2 columns, 1st sub-figure 
-    # l_true = int(valid_len_true)    
-    plt.imshow(draw_path(frame.copy(), path_true, x_lspace)) 
-    # plt.title(f"true, l: {l_true}")
+    l_true = int(valid_len_true)    
+    plt.imshow(draw_path(frame.copy(), path_true[4:l_true], x_lspace[:-4])) 
+    plt.title(f"true, l: {l_true}")
 
     # ----------------------- 
     plt.subplot(222)   
-    # l_pred = int(valid_len_pred)    
-    plt.imshow(draw_path(frame.copy(), path_pred, x_lspace))  
-    # plt.title(f"pred, l: {l_pred}")
+    l_pred = int(valid_len_pred)    
+    plt.imshow(draw_path(frame.copy(), path_pred[4:l_true], x_lspace[:-4]))  
+    plt.title(f"pred, l: {l_pred}")
 
     # ----------------------- 
 
@@ -363,7 +366,7 @@ def validate(n=16):
         if i >= n: break
  
 
-        inputs, labels, RGBs = data # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1), (1, 874, 1164, 3).
+        inputs, labels, RGBs = data # (b, seq_len, 12, 128, 256), (1, 2*num_pts+1), (1, 874, 1164, 3).
 
         inputs_t = tf.convert_to_tensor(inputs, dtype=tf.float32) # (b, seq_len, 12, 128, 256).
         # labels = tf.convert_to_tensor(labels, dtype=tf.float32) # (b, 2*num_pts+1).
@@ -388,14 +391,35 @@ def validate(n=16):
 
 
 
+ 
+def lr_scheduler(step):
+
+    step = min(step, args.total_steps)
+
+    lr = args.base_lr
+
+    progress = (step - args.warmup_steps) / float(args.total_steps - args.warmup_steps)
+    progress = np.clip(progress, 0.0, 1.0)
+  
+    lr = lr * 0.5 * (1. + np.cos(np.pi * progress))
+    
+    # if args.warmup_steps:
+    lr = lr * np.minimum(1., step / args.warmup_steps)
+
+    lr = max(lr, args.lr_min)
+
+    return np.asarray(lr, dtype=np.float32) 
 
 
 
 model = SequencePlanningNetwork()
 model(tf.random.uniform((1, 12, 128, 256)), tf.random.uniform((1, enc_args.seq_len-1, enc_args.hidden_size)))
+
+
 if args.ckpt: 
     model.load_weights(args.ckpt)  # for retraining
     print(f'loaded ckpt: {args.ckpt}')
+
 
 
 
@@ -404,7 +428,7 @@ if args.ckpt:
 # exit()
 # optimizer, lr_scheduler = model.configure_optimizers(args, model)
 
-optimizer = tf.keras.optimizers.SGD(learning_rate=args.lr,
+optimizer = tf.keras.optimizers.SGD(learning_rate=args.lr_min,
                 weight_decay=0.01, ema_momentum=0.9, clipvalue=1.0)        
 
 
@@ -431,55 +455,67 @@ seq_len = enc_args.seq_len
 n_seq = eps_len//seq_len
 bstep = bs//args.accum_steps
 
-for epoch in range(args.epochs):
+
+for epid, data in enumerate(train_dataloader):   
+
+    inputs, labels = data # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1). 
         
-    for epid, data in enumerate(train_dataloader):   
+    inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) # (b, seq_len, 12, 128, 256).
+    labels = tf.convert_to_tensor(labels, dtype=tf.float32) # (b, 2*num_pts+1).
 
-        inputs, labels = data # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1). 
-          
-        inputs = tf.convert_to_tensor(inputs, dtype=tf.float32) # (b, seq_len, 12, 128, 256).
-        labels = tf.convert_to_tensor(labels, dtype=tf.float32) # (b, 2*num_pts+1).
+    input_past = inputs[:,:seq_len-1, :, :, :] # (b, seq_len-1, 12, 128, 256).
+    input_cur = inputs[:,seq_len-1, :, :, :] # (b, 12, 128, 256).
 
-        input_past = inputs[:,:seq_len-1, :, :, :] # (b, seq_len-1, 12, 128, 256).
-        input_cur = inputs[:,seq_len-1, :, :, :] # (b, 12, 128, 256).
-
-        accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
+    accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
 
 
-        for aidx in range(args.accum_steps):
-            
-            input_past_mb = input_past[aidx*bstep:(aidx+1)*bstep, ...]
-            input_cur_mb = input_cur[aidx*bstep:(aidx+1)*bstep, ...]
-            labels_mb = labels[aidx*bstep:(aidx+1)*bstep, ...]
+    for aidx in range(args.accum_steps):
+        
+        input_past_mb = input_past[aidx*bstep:(aidx+1)*bstep, ...]
+        input_cur_mb = input_cur[aidx*bstep:(aidx+1)*bstep, ...]
+        labels_mb = labels[aidx*bstep:(aidx+1)*bstep, ...]
 
-            feature_past = tf.map_fn(model.extract_feature, input_past_mb) # (b, seq_len-1, 768).             
+        # feature_past = tf.map_fn(model.extract_feature, input_past_mb) # (b, seq_len-1, 768).             
+        feature_past = tf.zeros((bstep, seq_len-1, enc_args.hidden_size))
 
-            with tf.GradientTape() as tape:  
-                pred_trajectory = model(input_cur_mb, feature_past) # (b, 2*num_pts+1). 
-                loss = loss_fn(pred_trajectory, labels_mb) # (,), (,).
+        with tf.GradientTape() as tape:  
+            pred_trajectory = model(input_cur_mb, feature_past) # (b, 2*num_pts+1).  
+            loss = loss_fn(pred_trajectory, labels_mb) # (,), (,).
 
-            grad = tape.gradient(loss, model.trainable_variables)
+        
+        grad = tape.gradient(loss, model.trainable_variables)
 
-            for i in range(len(accum_gradients)):
-                accum_gradients[i] += grad[i] 
 
-        averaged_gradients = [accum_grad / tf.cast(args.accum_steps, tf.float32) for accum_grad in accum_gradients]
-        optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
+        for i in range(len(accum_gradients)):
+            accum_gradients[i] += grad[i] 
 
-     
 
-        if epid % args.log_interval == 0:
-            log = f'[{epoch}-{epid}] loss: {loss.numpy()}'
-            print(log)
-            with open("train.txt", "a") as f: f.write(log + '\n')
-           
+    averaged_gradients = [accum_grad / tf.cast(args.accum_steps, tf.float32) for accum_grad in accum_gradients]
 
-        if epid % args.val_interval == 0:
-            validate()
+    # print(f'averaged_gradients: {averaged_gradients}')
+    optimizer.apply_gradients(zip(averaged_gradients, model.trainable_variables))
 
-        if epid % args.save_interval == 0:
-            model.save_weights(f'ckpt/DDViVit-{epid}.h5')
-            print(f'saved ckpt: ckpt/DDViVit-{epid}.h5')
+
+    lr_next = lr_scheduler(epid)
+    tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
+
+    if (epid+1) % args.log_interval == 0:
+        log = f'[{epid}] loss: {loss.numpy()}, lr: {lr_next}.'
+        print(log)
+        with open("train.txt", "a") as f: f.write(log + '\n')
+        
+
+    if (epid+1) % args.log_wandb_interval == 0:
+        for i in range(len(accum_gradients)): 
+            print(f'[{i}] mean: {tf.math.reduce_mean(tf.math.abs(grad[i]))}, max: {tf.math.reduce_max(tf.math.abs(grad[i]))}, min: {tf.math.reduce_min(tf.math.abs(grad[i]))}')
+    
+    
+    if (epid+1) % args.val_interval == 0:
+        validate()
+
+    if (epid+1) % args.save_interval == 0:
+        model.save_weights(f'ckpt/DDViVit-{epid}.h5')
+        print(f'saved ckpt: ckpt/DDViVit-{epid}.h5')
 
 
 

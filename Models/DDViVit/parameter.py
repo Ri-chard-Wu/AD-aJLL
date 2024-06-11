@@ -31,11 +31,16 @@ class AttrDict(dict):
 
 train_args = AttrDict({
        
-        'batch_size': 24, 
-        'accum_steps': 24,        
+        'batch_size': 8, 
+        'accum_steps': 1,        
         'epochs': 100000,  
+         
+        'total_steps': 10000,
+        'base_lr': 1e-2, 
+        'warmup_steps': 200,
+        'lr_min': 1e-4,
         
-        'lr': 0.0001,   
+                
         'num_pts': 192,
         
         'horizon': 512,
@@ -43,9 +48,10 @@ train_args = AttrDict({
 
         'ckpt': [None, f'ckpt/DD-1700.h5'][0],
         
-        'save_interval': 100,
+        'save_interval': 500,
         'log_interval': 8,
-        'val_interval': 100
+        'val_interval': 500,
+        'log_wandb_interval': 200
 
     }) 
  
