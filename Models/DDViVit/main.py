@@ -106,67 +106,7 @@ def read_frames(hevc_file):
     return frames
  
   
-
-# def get_train_dataloader(pkl_files):
-  
-#     hevc_files = [pkl_file.replace('data.pkl', 'fcamera.hevc') for pkl_file in pkl_files]    
-
-#     H = args.horizon 
-#     B = args.batch_size
-#     n_B = len(pkl_files) // B 
-          
-#     seq_len = enc_args.seq_len
-
-#     fidx = 0
-
-#     while(1):  
-        
-#         X0 = np.zeros((B, H, 12, 128, 256), dtype=np.uint8)            
-#         X3 = np.zeros((B, H, 512), dtype=np.float32)    
-#         Y = [np.zeros((B, H, s)) for s in Y_shape]
-
-#         for bidx in range(B):
-            
-#             while(1):
-#                 pkl_file = pkl_files[fidx]
-#                 hevc_file = hevc_files[fidx]                    
-#                 frames = read_frames(hevc_file) 
-
-#                 fidx += 1
-#                 if(fidx >= len(pkl_files)): fidx = 0
-
-#                 if(len(frames)-H > 0):  
-#                     break
-#                 else:
-#                     print(f'[Warning] len(frames)-H <= 0): {hevc_file}')                        
-#                     continue
-            
-#             t0 = np.random.choice(np.arange(len(frames)-H), size=1)[0]
-#             frames = frames[t0:t0+H+1]
-
-#             with open(pkl_file, 'rb') as f:      
-
-#                 data = pickle.load(f)   
-#                 assert data['Xin3'].shape[1] == 512
-                    
-#                 for i in range(12):
-#                     assert data['Y'][i].shape[1] == Y_shape[i]
-
-#             for t in range(H):   
-    
-#                 X0[bidx, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
-#                 X3[bidx, t] = data['Xin3'][t0+t]
-#                 for j in range(12):
-#                     Y[j][bidx, t] = data['Y'][j][t0+t]
-
-#             print(f'\rsampling training data {bidx+1} / {B}', end="")
-
-#         print()
-#         for t in range(0, H-seq_len): 
-#             yield X0[:, t:t+seq_len, :, :, :], Y[0][:, t+seq_len-1, :] # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1).
-            
-#         del X0, Y
-
+ 
  
 
 
@@ -190,6 +130,7 @@ def get_train_dataloader(pkl_files):
 
     while(1):  
         
+        # RGBs = np.zeros((1, H, 874, 1164, 3), dtype=np.uint8) # for debug.
         X0 = np.zeros((B, H, 12, 128, 256), dtype=np.uint8)            
         X3 = np.zeros((B, H, 512), dtype=np.float32)    
         Y = [np.zeros((B, H, s)) for s in Y_shape]
@@ -226,7 +167,8 @@ def get_train_dataloader(pkl_files):
                 data['Y'][j] = data['Y'][j][::frame_skip]
                 
             for t in range(H):   
-    
+                
+                # RGBs[0, t] = cv2.cvtColor(frames[t], cv2.COLOR_BGR2RGB)
                 X0[bidx, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))                
                 for j in range(12):
                     Y[j][bidx, t] = data['Y'][j][t]
@@ -305,7 +247,58 @@ def get_val_dataloader(pkl_files):
 
   
 
+def plot_bsv(traj_true, traj_pred, dir_name, file_name):
+
  
+     
+    if(not os.path.exists(dir_name)):
+        os.makedirs(dir_name, exist_ok=True)
+
+    PATH_DISTANCE = 192
+    x_lspace = np.linspace(1, PATH_DISTANCE, PATH_DISTANCE)  
+    
+    path_true = traj_true[:PATH_DISTANCE]
+    # path_std_true = traj_true[PATH_DISTANCE:2*PATH_DISTANCE]
+    valid_len_true = np.fmin(PATH_DISTANCE, np.fmax(5, traj_true[2*PATH_DISTANCE]))
+ 
+    path_pred = traj_pred[:PATH_DISTANCE]
+    # path_std_pred = traj_pred[PATH_DISTANCE:2*PATH_DISTANCE]
+    # valid_len_pred = np.fmin(PATH_DISTANCE, np.fmax(5, traj_pred[2*PATH_DISTANCE]))
+    valid_len_pred = traj_pred[2*PATH_DISTANCE]
+
+
+
+    plt.clf()   # clear figure
+    plt.xlim(0, 1200)
+    plt.ylim(800, 0)
+ 
+    l_true = int(valid_len_true)  
+
+    # -----------------------   
+    
+    plt.subplot(223)
+    plt.gca().invert_xaxis() 
+    # plt.title("true bsv") 
+    plt.plot(path_true[4:l_true], x_lspace[:l_true-4],  linewidth=1, label='true')
+    plt.plot(path_pred[4:l_true], x_lspace[:l_true-4],  linewidth=1, label='pred')
+    plt.legend()
+    # ----------------------- 
+
+    # plt.subplot(224)
+    # plt.gca().invert_xaxis() 
+    # plt.title("pred bsv") 
+    # plt.plot(path_pred[4:l_true], x_lspace[:l_true-4], "g-", linewidth=1)
+  
+    # ----------------------- 
+
+    plt.tight_layout()
+    plt.savefig(dir_name + '/' + file_name)  
+
+
+
+ 
+
+
 def plot_outs(traj_true, # (2*num_pts+1,).
             traj_pred, # (2*num_pts+1,).
              frame, 
@@ -327,7 +320,8 @@ def plot_outs(traj_true, # (2*num_pts+1,).
  
     path_pred = traj_pred[:PATH_DISTANCE]
     # path_std_pred = traj_pred[PATH_DISTANCE:2*PATH_DISTANCE]
-    valid_len_pred = np.fmin(PATH_DISTANCE, np.fmax(5, traj_pred[2*PATH_DISTANCE]))
+    # valid_len_pred = np.fmin(PATH_DISTANCE, np.fmax(5, traj_pred[2*PATH_DISTANCE]))
+    valid_len_pred = traj_pred[2*PATH_DISTANCE]
 
 
 
@@ -338,15 +332,29 @@ def plot_outs(traj_true, # (2*num_pts+1,).
     # ----------------------- 
     plt.subplot(221) # 221: 2 rows, 2 columns, 1st sub-figure 
     l_true = int(valid_len_true)    
-    plt.imshow(draw_path(frame.copy(), path_true[4:l_true], x_lspace[:-4])) 
+    plt.imshow(draw_path(frame.copy(), path_true[4:l_true], x_lspace[:l_true-4])) 
     plt.title(f"true, l: {l_true}")
 
     # ----------------------- 
     plt.subplot(222)   
-    l_pred = int(valid_len_pred)    
-    plt.imshow(draw_path(frame.copy(), path_pred[4:l_true], x_lspace[:-4]))  
-    plt.title(f"pred, l: {l_pred}")
+    # l_pred = int(valid_len_pred)    
+    plt.imshow(draw_path(frame.copy(), path_pred[4:l_true], x_lspace[:l_true-4]))  
+    plt.title(f"pred, l: {valid_len_pred}")
 
+    # ----------------------- 
+ 
+    plt.subplot(223)
+    plt.gca().invert_xaxis() 
+    plt.title("true bsv") 
+    plt.plot(path_true[4:l_true], x_lspace[:l_true-4], "g-", linewidth=1)
+ 
+    # ----------------------- 
+
+    plt.subplot(224)
+    plt.gca().invert_xaxis() 
+    plt.title("pred bsv") 
+    plt.plot(path_pred[4:l_true], x_lspace[:l_true-4], "g-", linewidth=1)
+  
     # ----------------------- 
 
     plt.tight_layout()
@@ -382,6 +390,8 @@ def validate(n=16):
         
         plot_outs(labels[0], traj_pred, RGBs[0], dir_name=f'output/val', file_name=f'{i}.png')
      
+        
+
 
         del labels, inputs, RGBs
 
@@ -455,7 +465,7 @@ seq_len = enc_args.seq_len
 n_seq = eps_len//seq_len
 bstep = bs//args.accum_steps
 
-
+ 
 for epid, data in enumerate(train_dataloader):   
 
     inputs, labels = data # (b, seq_len, 12, 128, 256), (b, 2*num_pts+1). 
@@ -479,15 +489,19 @@ for epid, data in enumerate(train_dataloader):
         feature_past = tf.zeros((bstep, seq_len-1, enc_args.hidden_size))
 
         with tf.GradientTape() as tape:  
-            pred_trajectory = model(input_cur_mb, feature_past) # (b, 2*num_pts+1).  
-            loss = loss_fn(pred_trajectory, labels_mb) # (,), (,).
-
+            traj_pred = model(input_cur_mb, feature_past) # (b, 2*num_pts+1).  
+            path_loss, valid_len_loss, std_loss = loss_fn(traj_pred, labels_mb) # (,), (,).
+            loss = path_loss + 0.1*valid_len_loss + 0.1*std_loss
         
         grad = tape.gradient(loss, model.trainable_variables)
 
 
         for i in range(len(accum_gradients)):
             accum_gradients[i] += grad[i] 
+
+    
+    for i in range(labels_mb.shape[0]):
+        plot_bsv(labels_mb[i], traj_pred[i], dir_name=f'output/train', file_name=f'tr-{i}.png')
 
 
     averaged_gradients = [accum_grad / tf.cast(args.accum_steps, tf.float32) for accum_grad in accum_gradients]
@@ -499,15 +513,16 @@ for epid, data in enumerate(train_dataloader):
     lr_next = lr_scheduler(epid)
     tf.keras.backend.set_value(optimizer.learning_rate, lr_next)
 
+
     if (epid+1) % args.log_interval == 0:
-        log = f'[{epid}] loss: {loss.numpy()}, lr: {lr_next}.'
+        log = f'[{epid}] path_loss: {round(float(path_loss.numpy()), 3)}, valid_len_loss: {round(float(valid_len_loss.numpy()), 3)}, std_loss: {round(float(std_loss.numpy()), 3)}, lr: {lr_next}.'
         print(log)
         with open("train.txt", "a") as f: f.write(log + '\n')
         
 
     if (epid+1) % args.log_wandb_interval == 0:
         for i in range(len(accum_gradients)): 
-            print(f'[{i}] mean: {tf.math.reduce_mean(tf.math.abs(grad[i]))}, max: {tf.math.reduce_max(tf.math.abs(grad[i]))}, min: {tf.math.reduce_min(tf.math.abs(grad[i]))}')
+            print(f'[grad-{i}] mean: {tf.math.reduce_mean(tf.math.abs(grad[i]))}, max: {tf.math.reduce_max(tf.math.abs(grad[i]))}, min: {tf.math.reduce_min(tf.math.abs(grad[i]))}')
     
     
     if (epid+1) % args.val_interval == 0:

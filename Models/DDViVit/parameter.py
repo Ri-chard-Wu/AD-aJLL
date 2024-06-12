@@ -35,9 +35,9 @@ train_args = AttrDict({
         'accum_steps': 1,        
         'epochs': 100000,  
          
-        'total_steps': 10000,
+        'total_steps': 2000,
         'base_lr': 1e-2, 
-        'warmup_steps': 200,
+        'warmup_steps': 100,
         'lr_min': 1e-4,
         
                 
@@ -46,7 +46,7 @@ train_args = AttrDict({
         'horizon': 512,
         'horizon_val': 128,
 
-        'ckpt': [None, f'ckpt/DD-1700.h5'][0],
+        'ckpt': [None, f'ckpt/DDViVit-3999.h5'][0],
         
         'save_interval': 500,
         'log_interval': 8,
@@ -60,7 +60,7 @@ train_args = AttrDict({
 transformerEncoder_args = AttrDict({ 
         "heads":8,  
         "depth":2, # transformer's layer number 
-        "hidden_size": 512, 
+        "hidden_size": [512, 1024][1], 
         "dropout_rate": 0.0, 
         "mlp_dim": 1024,
         "seq_len": 32

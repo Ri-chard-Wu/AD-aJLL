@@ -8,6 +8,13 @@ from TransformerEncoder import TransformerEncoder
 from parameter import transformerEncoder_args as enc_args
 from parameter import AttrDict
 
+
+
+def tanh_rescale(x, _min, _max):
+    return 0.5*(x+1.0) * (_max - _min) + _min
+
+
+
 class SequencePlanningNetwork(tf.keras.Model):
     def __init__(self):
         super().__init__()
@@ -74,7 +81,7 @@ class SequencePlanningNetwork(tf.keras.Model):
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(128, activation='relu'), 
-            tf.keras.layers.Dense(2*num_pts+1)
+            tf.keras.layers.Dense(2*num_pts+1),
         ]) 
  
         # self.feature_sequence = deque(maxlen=100) # most recent 100 frames as input to transformer encoder.
@@ -100,10 +107,6 @@ class SequencePlanningNetwork(tf.keras.Model):
         '''
         x = tf.transpose(x, perm=[0,2,3,1]) # (b, 128, 256, 12).
         features = self.backbone(x, training=training) # (b, 1024).
-
-
- 
-
         features = self.plan_head(features, training=training) # (b, hid_sz).
         return features # (b, hid_sz).
 
@@ -142,12 +145,20 @@ class SequencePlanningNetwork(tf.keras.Model):
 
         x = self.plan_head_tip(feature_cur, training=training) # (b, 2*num_pts+1).
 
+        x = tf.math.tanh(x) 
+
+        path = x[:, :self.num_pts] # (b, num_pts).
+        std = x[:, self.num_pts:2*self.num_pts] # (b, num_pts).
+        valid_len = x[:, 2*self.num_pts:] # (b, 1). 
+ 
+        path = tanh_rescale(path, -20.0, 20.0) # (b, num_pts).
+        valid_len = tanh_rescale(valid_len, 0.0, 192.0) # (b, 1). 
+
+        x = tf.concat([path, std, valid_len], axis=1)
 
         return x # (b, 2*num_pts+1).
 
  
-
-
 
 
 
@@ -170,6 +181,7 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         '''        
 
         path_true = traj_true[:, :self.num_pts] # (b, num_pts).
+        std_true = traj_true[:, self.num_pts:2*self.num_pts] # (b, num_pts).
         valid_len_true = tf.clip_by_value(traj_true[:, 2*self.num_pts], 5, self.num_pts) # (b,). 
 
         b = path_true.shape[0]
@@ -179,79 +191,20 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         
 
         path_pred = traj_pred[:, :self.num_pts] # (b, num_pts).
+        std_pred = traj_pred[:, self.num_pts:2*self.num_pts] # (b, num_pts).
         valid_len_pred = tf.clip_by_value(traj_pred[:, 2*self.num_pts], 5, self.num_pts) # (b,).
         
-        valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
+        valid_len_loss = self.reg_loss(valid_len_true*0.02, valid_len_pred) # (,).
+        # valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
         
-        reg_loss = self.reg_loss(path_true*mask, path_pred*mask) # (b,). 
-        reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
+        path_loss = self.reg_loss(path_true*mask, path_pred*mask) # (b,). 
+        path_loss = tf.math.reduce_mean(path_loss, axis=0) # (,).
 
-        return reg_loss + 0.1*valid_len_loss # (,), (,).
+        std_loss = self.reg_loss(std_true*mask, std_pred*mask) # (b,). 
+        std_loss = tf.math.reduce_mean(std_loss, axis=0) # (,).
+
+        # return path_loss + 0.1*valid_len_loss + 0.001*std_loss # (,).
+
+        return path_loss, valid_len_loss, std_loss # (,).
  
- 
-        # reg_loss = tf.math.reduce_mean(((path_true-path_pred)**2)*mask, axis=1) # (,).
-        # reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
-
-        # return reg_loss
- 
-
-
-    # def call(self, pred_traj, gt, training=True):
-    #     '''
-    #         pred_cls_prob: (b, 5), 
-    #         pred_trajectory: (b, 5, 2*num_pts+1), 
-    #         gt: (b, 2*num_pts+1).
-    #     '''        
-
-    #     path_gt = gt[:, :self.num_pts] # (b, num_pts).
-    #     valid_len_gt = tf.clip_by_value(gt[:, 2*self.num_pts], 5, self.num_pts-1) # (b,).
-    #     L = tf.cast(valid_len_gt, dtype=tf.int32) # (b,).
-
-    #     path_pred = pred_traj[:, :, :self.num_pts] # (b, 5, num_pts).
-    #     valid_len_pred = tf.clip_by_value(pred_traj[:, :, 2*self.num_pts], 5, self.num_pts-1) # (b, 5).
-
-        
-
-    #     b = pred_cls_prob.shape[0]
-    #     M = self.M
-
-
-    #     nograd_path_pred = tf.stop_gradient(path_pred)
-    #     nograd_path_gt = tf.stop_gradient(path_gt)
-    #     nograd_L = tf.stop_gradient(L)
- 
-    #     sel = tf.stack([tf.repeat(tf.range(b), repeats=M, axis=0),
-    #                     tf.convert_to_tensor(list(range(M))*b, dtype=tf.int32), 
-    #                     tf.repeat(nograd_L, repeats=M, axis=0)], 
-    #                 axis=1)   
-    #     pred_end_positions = tf.reshape(tf.gather_nd(nograd_path_pred, sel), (b, M)) # (b, 5).
- 
-    #     sel = tf.stack([tf.range(b), nograd_L], axis=1)  
-    #     gt_end_positions = tf.gather_nd(nograd_path_gt, sel)[:, None] # (b, 1).
- 
-    #     distances = (pred_end_positions - gt_end_positions) ** 2 # (b, 5).
- 
-    #     gt_cls = tf.argmin(distances, axis=1) # (b,).
-    #     gt_cls = tf.cast(gt_cls, dtype=tf.int32)
-
-
-
-    #     # pred_traj = pred_traj[torch.tensor(range(len(gt_cls)),\
-    #     #                          device=gt_cls.device), index, ...]  # (b, num_pts, 3).
-    #     sel = tf.stack([tf.range(b), gt_cls], axis=1) # (b, 2).
-    #     path_pred = tf.gather_nd(path_pred, sel) # (b, num_pts).
-
-    #     valid_len_pred = tf.gather_nd(valid_len_pred, sel) # (b,).
-    #     valid_len_loss = self.reg_loss(valid_len_gt, valid_len_pred) # (,).
-
-    #     gt_cls_onehot = tf.one_hot(gt_cls, M) # (b, 5).
-    #     cls_loss = self.cls_loss(gt_cls_onehot, pred_cls_prob) # (b,).
-    #     reg_loss = self.reg_loss(path_gt, path_pred) # (b,).
- 
-
-    #     cls_loss = tf.math.reduce_mean(cls_loss, axis=0) # (,).
-    #     reg_loss = tf.math.reduce_mean(reg_loss, axis=0) # (,).
-    #     # valid_len_loss = tf.math.reduce_mean(valid_len_loss, axis=0) # (,).
-
-    #     return cls_loss, reg_loss, valid_len_loss # (,), (,).
-
+  
