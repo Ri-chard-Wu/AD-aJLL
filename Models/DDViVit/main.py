@@ -123,7 +123,7 @@ def get_train_dataloader(pkl_files):
     frame_skip = 4
     
     # seq_skip = seq_len // 2 # 16.
-    seq_skip = 1
+    seq_skip = 2
 
     fidx = 0
     epoch = 0
@@ -273,14 +273,18 @@ def plot_bsv(traj_true, traj_pred, dir_name, file_name):
     plt.ylim(800, 0)
  
     l_true = int(valid_len_true)  
+    l_pred = int(valid_len_pred)  
 
     # -----------------------   
     
     plt.subplot(223)
     plt.gca().invert_xaxis() 
     # plt.title("true bsv") 
+    plt.title(f"l_true: {l_true}, l_pred: {l_pred}")
     plt.plot(path_true[4:l_true], x_lspace[:l_true-4],  linewidth=1, label='true')
     plt.plot(path_pred[4:l_true], x_lspace[:l_true-4],  linewidth=1, label='pred')
+
+    
     plt.legend()
     # ----------------------- 
 
@@ -464,7 +468,6 @@ eps_len = args.horizon
 seq_len = enc_args.seq_len
 n_seq = eps_len//seq_len
 bstep = bs//args.accum_steps
-
  
 for epid, data in enumerate(train_dataloader):   
 
@@ -491,7 +494,7 @@ for epid, data in enumerate(train_dataloader):
         with tf.GradientTape() as tape:  
             traj_pred = model(input_cur_mb, feature_past) # (b, 2*num_pts+1).  
             path_loss, valid_len_loss, std_loss = loss_fn(traj_pred, labels_mb) # (,), (,).
-            loss = path_loss + 0.1*valid_len_loss + 0.1*std_loss
+            loss = path_loss + 0.001*valid_len_loss + 0.1*std_loss
         
         grad = tape.gradient(loss, model.trainable_variables)
 

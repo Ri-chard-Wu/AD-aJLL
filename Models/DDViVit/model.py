@@ -69,6 +69,7 @@ class SequencePlanningNetwork(tf.keras.Model):
   
 
         self.plan_head = tf.keras.Sequential([ 
+            tf.keras.layers.ReLU(),
             tf.keras.layers.Dense(enc_args.hidden_size), # (b, hid_sz).
             tf.keras.layers.ReLU(),
         ]) # (b, hid_sz).
@@ -147,14 +148,16 @@ class SequencePlanningNetwork(tf.keras.Model):
 
         x = tf.math.tanh(x) 
 
+        # path = tf.math.sinh(x[:, :self.num_pts]) # (b, num_pts).
+
         path = x[:, :self.num_pts] # (b, num_pts).
         std = x[:, self.num_pts:2*self.num_pts] # (b, num_pts).
         valid_len = x[:, 2*self.num_pts:] # (b, 1). 
  
-        path = tanh_rescale(path, -20.0, 20.0) # (b, num_pts).
+        path = tanh_rescale(path, -50.0, 50.0) # (b, num_pts).
         valid_len = tanh_rescale(valid_len, 0.0, 192.0) # (b, 1). 
 
-        x = tf.concat([path, std, valid_len], axis=1)
+        x = tf.concat([path, std, valid_len], axis=1) # (b, 2*num_pts+1).
 
         return x # (b, 2*num_pts+1).
 
@@ -182,7 +185,7 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
 
         path_true = traj_true[:, :self.num_pts] # (b, num_pts).
         std_true = traj_true[:, self.num_pts:2*self.num_pts] # (b, num_pts).
-        valid_len_true = tf.clip_by_value(traj_true[:, 2*self.num_pts], 5, self.num_pts) # (b,). 
+        valid_len_true = traj_true[:, 2*self.num_pts] # (b,). 
 
         b = path_true.shape[0]
         L = tf.cast(valid_len_true, dtype=tf.int32)[:, None] # (b, 1).
@@ -192,9 +195,9 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
 
         path_pred = traj_pred[:, :self.num_pts] # (b, num_pts).
         std_pred = traj_pred[:, self.num_pts:2*self.num_pts] # (b, num_pts).
-        valid_len_pred = tf.clip_by_value(traj_pred[:, 2*self.num_pts], 5, self.num_pts) # (b,).
+        valid_len_pred = traj_pred[:, 2*self.num_pts] # (b,).
         
-        valid_len_loss = self.reg_loss(valid_len_true*0.02, valid_len_pred) # (,).
+        valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
         # valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
         
         path_loss = self.reg_loss(path_true*mask, path_pred*mask) # (b,). 
@@ -202,9 +205,7 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
 
         std_loss = self.reg_loss(std_true*mask, std_pred*mask) # (b,). 
         std_loss = tf.math.reduce_mean(std_loss, axis=0) # (,).
-
-        # return path_loss + 0.1*valid_len_loss + 0.001*std_loss # (,).
-
+ 
         return path_loss, valid_len_loss, std_loss # (,).
  
   
