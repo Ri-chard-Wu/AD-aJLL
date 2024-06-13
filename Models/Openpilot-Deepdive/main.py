@@ -162,76 +162,80 @@ def main(args):
 
     for epoch in tqdm(range(args.epochs), disable=disable_tqdm, position=0):
 
-    #     for batch_idx, data in enumerate(tqdm(train_dataloader, leave=False, disable=disable_tqdm, position=1)):
+        for batch_idx, data in enumerate(tqdm(train_dataloader, leave=False, disable=disable_tqdm, position=1)):
             
             
 
-    #         # seq_inputs: (b, N+1, 6, H, W), 2 rgb, not yuv.
-    #         seq_inputs, seq_labels = data['seq_input_img'].cuda(),\
-    #                              data['seq_future_poses'].cuda() # (b, N+1, 6, h, w), (b, N, num_pts, 3).
+            # seq_inputs: (b, N+1, 6, H, W), 2 rgb, not yuv.
+            seq_inputs, seq_labels = data['seq_input_img'].cuda(),\
+                                 data['seq_future_poses'].cuda() # (b, N+1, 6, h, w), (b, N, num_pts, 3).
             
-    #         bs = seq_labels.size(0) 
-    #         seq_length = seq_labels.size(1)  
+            bs = seq_labels.size(0) 
+            seq_length = seq_labels.size(1)  
             
-    #         hidden = torch.zeros((2, bs, 256)).cuda()
-    #         total_loss = 0
+            hidden = torch.zeros((2, bs, 256)).cuda()
+            total_loss = 0
 
-    #         total_losses = []
+            total_losses = []
 
-    #         for t in tqdm(range(seq_length), leave=False, disable=disable_tqdm, position=2):
+            for t in tqdm(range(seq_length), leave=False, disable=disable_tqdm, position=2):
                 
-    #             num_steps += 1
+                num_steps += 1
 
-    #             inputs, labels = seq_inputs[:, t, :, :, :], \
-    #                     seq_labels[:, t, :, :] # (b, 6, h, w), (b, num_pts, 3).
+                inputs, labels = seq_inputs[:, t, :, :, :], \
+                        seq_labels[:, t, :, :] # (b, 6, h, w), (b, num_pts, 3).
                 
-    #             # inputs: (b, 6, H, W), 2 rgb, not yuv.
-    #             pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
+                # inputs: (b, 6, H, W), 2 rgb, not yuv.
+                pred_cls, pred_trajectory, hidden = model(inputs, hidden) # (b, M), (b, M, num_pts, 3), .
                 
-    #             cls_loss, reg_loss = loss(pred_cls, pred_trajectory, labels) # (,)?, (3,).
+                cls_loss, reg_loss = loss(pred_cls, pred_trajectory, labels) # (,)?, (3,).
 
-    #             total_loss += (cls_loss + args.mtp_alpha * reg_loss.mean()) / args.optimize_per_n_step
+                total_loss += (cls_loss + args.mtp_alpha * reg_loss.mean()) / args.optimize_per_n_step
             
-    #             if (num_steps + 1) % args.log_per_n_step == 0:
-    #                 # TODO: add a customized log function
-    #                 writer.add_scalar('train/epoch', epoch, num_steps)
-    #                 writer.add_scalar('loss/cls', cls_loss, num_steps)
-    #                 writer.add_scalar('loss/reg', reg_loss.mean(), num_steps)
-    #                 writer.add_scalar('loss/reg_x', reg_loss[0], num_steps)
-    #                 writer.add_scalar('loss/reg_y', reg_loss[1], num_steps)
-    #                 writer.add_scalar('loss/reg_z', reg_loss[2], num_steps)
-    #                 writer.add_scalar('param/lr', optimizer.param_groups[0]['lr'], num_steps)
+                if (num_steps + 1) % args.log_per_n_step == 0:
+                    # TODO: add a customized log function
+                    writer.add_scalar('train/epoch', epoch, num_steps)
+                    writer.add_scalar('loss/cls', cls_loss, num_steps)
+                    writer.add_scalar('loss/reg', reg_loss.mean(), num_steps)
+                    writer.add_scalar('loss/reg_x', reg_loss[0], num_steps)
+                    writer.add_scalar('loss/reg_y', reg_loss[1], num_steps)
+                    writer.add_scalar('loss/reg_z', reg_loss[2], num_steps)
+                    writer.add_scalar('param/lr', optimizer.param_groups[0]['lr'], num_steps)
                     
-    #                 # print(f"[{num_steps}] cls_loss: {cls_loss}, reg: {reg_loss.mean()}, lr: {optimizer.param_groups[0]['lr']}")
+                    # print(f"[{num_steps}] cls_loss: {cls_loss}, reg: {reg_loss.mean()}, lr: {optimizer.param_groups[0]['lr']}")
 
 
 
-    #             if (t + 1) % args.optimize_per_n_step == 0:
-    #                 hidden = hidden.clone().detach()
-    #                 optimizer.zero_grad()
-    #                 total_loss.backward()
-    #                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # TODO: move to args
-    #                 optimizer.step()
-    #                 writer.add_scalar('loss/total', total_loss, num_steps)     
+                if (t + 1) % args.optimize_per_n_step == 0:
+                    hidden = hidden.clone().detach()
+                    optimizer.zero_grad()
+                    total_loss.backward()
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # TODO: move to args
+                    optimizer.step()
+                    writer.add_scalar('loss/total', total_loss, num_steps)     
 
-    #                 total_losses.append(total_loss.detach().cpu().numpy())
-
-
-    #                 total_loss = 0
+                    total_losses.append(total_loss.detach().cpu().numpy())
 
 
-    #         print(f'[{num_steps}] total_loss: {np.mean(total_losses)}')
+                    total_loss = 0
 
-    #         if not isinstance(total_loss, int):
-    #             optimizer.zero_grad()
-    #             total_loss.backward()
-    #             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # TODO: move to args
-    #             optimizer.step()
 
-    #             writer.add_scalar('loss/total', total_loss, num_steps)
+            print(f'[{num_steps}] total_loss: {np.mean(total_losses)}')
 
-      
-    #     lr_scheduler.step()
+            if not isinstance(total_loss, int):
+                optimizer.zero_grad()
+                total_loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)  # TODO: move to args
+                optimizer.step()
+
+                writer.add_scalar('loss/total', total_loss, num_steps)
+
+            # break
+
+        lr_scheduler.step()
+
+
+
 
 
 
@@ -241,6 +245,8 @@ def main(args):
             torch.save(model.state_dict(), ckpt_path)
             print('[Epoch %d] checkpoint saved at %s' % (epoch, ckpt_path))
 
+
+
             model.eval()
 
             with torch.no_grad():
@@ -249,7 +255,7 @@ def main(args):
 
                 for batch_idx, data in enumerate(tqdm(val_dataloader, 
                                    leave=False, disable=disable_tqdm, position=1)):
-                    
+                    print(f'eval batch_idx-{batch_idx}')
 
                     seq_inputs, seq_labels = data['seq_input_img'].cuda(), data['seq_future_poses'].cuda()
                     origin_imgs = data['origin_imgs']
@@ -261,7 +267,7 @@ def main(args):
                     hidden = torch.zeros((2, bs, 256), device=seq_inputs.device)
                     for t in tqdm(range(seq_length), leave=False, disable=True, position=2):
                         
-                        print(f'[{batch_idx}] seq_length: {seq_length}, t: {t}')
+                        # print(f'[{batch_idx}] seq_length: {seq_length}, t: {t}')
 
                         inputs, labels = seq_inputs[:, t, :, :, :], seq_labels[:, t, :, :]
 
@@ -275,17 +281,16 @@ def main(args):
                         pred_conf = softmax(pred_cls, dim=-1).cpu().numpy()[0] # (M,).
                         pred_trajectory = pred_trajectory.reshape(args.M, args.num_pts, 3).cpu().numpy() # (M, num_pts, 3).                
 
-                        # print(f'origin_img.dtype: {origin_imgs[0, t, :, :, :].numpy().dtype}, mean: {np.mean(origin_imgs[0, t, :, :, :].numpy())}')
-
-                        # if(t%40==0):
-                        #     visualize(origin_imgs[0, t, :, :, :].numpy(), 
-                        #         inputs.cpu(), # (1, 6, h, w).
-                        #         labels.cpu(), # (1, num_pts, 3).
-                        #         pred_trajectory, # (M, num_pts, 3).
-                        #         pred_conf, # (M,).
-                        #         dir_name='output/val',
-                        #         file_name='%04d-%04d.jpg' % (batch_idx, t)
-                        #         )
+                        
+                        if(t%40==0):
+                            visualize(origin_imgs[0, t, :, :, :].numpy(), 
+                                inputs.cpu(), # (1, 6, h, w).
+                                labels.cpu(), # (1, num_pts, 3).
+                                pred_trajectory, # (M, num_pts, 3).
+                                pred_conf, # (M,).
+                                dir_name='output/val',
+                                file_name='%04d-%04d.jpg' % (batch_idx, t)
+                                )
 
                     del data
                     del origin_imgs
