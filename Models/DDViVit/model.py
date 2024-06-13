@@ -23,9 +23,8 @@ class SequencePlanningNetwork(tf.keras.Model):
         self.num_pts = num_pts     
         
         '''EfficientNetB2
-            in shape: (b, 12, 128, 256) .
-            out shape: (b, 4, 8, 1408).
-            ch format: last.
+            in shape: (b, 128, 256, 12) .
+            out shape: (b, 1024). 
         '''        
         # self.backbone = EfficientNetB2()
  
@@ -82,7 +81,7 @@ class SequencePlanningNetwork(tf.keras.Model):
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(128, activation='relu'), 
-            tf.keras.layers.Dropout(0.3),
+            # tf.keras.layers.Dropout(0.3),
             tf.keras.layers.Dense(2*num_pts+1),
         ]) 
  
@@ -190,26 +189,29 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         std_true = traj_true[:, self.num_pts:2*self.num_pts] # (b, num_pts).
         valid_len_true = traj_true[:, 2*self.num_pts] # (b,). 
 
-        b = path_true.shape[0]
-        L = tf.cast(valid_len_true, dtype=tf.int32)[:, None] # (b, 1).
-        s = tf.convert_to_tensor([[i for i in range(1, self.num_pts+1)]]*b) # (b, num_pts).
-        mask = tf.cast(s < L, tf.float32) # (b, num_pts).
+        # b = path_true.shape[0]
+        # L = tf.cast(valid_len_true, dtype=tf.int32)[:, None] # (b, 1).
+        # s = tf.convert_to_tensor([[i for i in range(1, self.num_pts+1)]]*b) # (b, num_pts).
+        # mask = tf.cast(s < L, tf.float32) # (b, num_pts).
         
 
         path_pred = traj_pred[:, :self.num_pts] # (b, num_pts).
         std_pred = traj_pred[:, self.num_pts:2*self.num_pts] # (b, num_pts).
         valid_len_pred = traj_pred[:, 2*self.num_pts] # (b,).
         
-        # valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
-        valid_len_loss = tf.math.reduce_mean((valid_len_true - valid_len_pred)**2) # (,).
+        valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
+        # valid_len_loss = tf.math.reduce_mean((valid_len_true - valid_len_pred)**2) # (,).
         
         
+        path_loss = self.reg_loss(path_true, path_pred) # (b,). 
         # path_loss = self.reg_loss(path_true*mask, path_pred*mask) # (b,). 
-        path_loss = tf.math.reduce_mean(((path_true-path_pred)*mask)**2, axis=1) # (b,). 
+        # path_loss = tf.math.reduce_mean(((path_true-path_pred)*mask)**2, axis=1) # (b,). 
         path_loss = tf.math.reduce_mean(path_loss, axis=0) # (,).
 
+
+        std_loss = self.reg_loss(std_true, std_pred) # (b,). 
         # std_loss = self.reg_loss(std_true*mask, std_pred*mask) # (b,). 
-        std_loss = tf.math.reduce_mean(((std_true-std_pred)*mask)**2, axis=1) # (b,). 
+        # std_loss = tf.math.reduce_mean(((std_true-std_pred)*mask)**2, axis=1) # (b,). 
         std_loss = tf.math.reduce_mean(std_loss, axis=0) # (,).
  
         return path_loss, valid_len_loss, std_loss # (,).

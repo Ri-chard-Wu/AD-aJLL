@@ -193,20 +193,21 @@ def EfficientNet(width_coefficient,
                  include_top=True,
                  weights='imagenet',
                  input_tensor=None,
-                 input_shape=None, # (12, 128, 256).
+                 input_shape=None, # (128, 256, 12).
                  pooling=None,
                  classes=1000,
                  **kwargs # no.
                  ):
   
     img_input = tf.keras.Input(shape=input_shape)    
-    img = tf.keras.layers.Permute((2, 3, 1))(img_input) # (b, 128, 256, 12).
+    # img = tf.keras.layers.Permute((2, 3, 1))(img_input) # (b, 128, 256, 12).
+    # img = img_input
 
     bn_axis = 3 if tf.keras.backend.image_data_format() == 'channels_last' else 1
     activation = get_swish()
 
     # Build stem
-    x = img
+    x = img_input
     x = tf.keras.layers.Conv2D(round_filters(32, width_coefficient, depth_divisor), 3,
                       strides=(2, 2),
                       padding='same',
@@ -270,11 +271,16 @@ def EfficientNet(width_coefficient,
     x = tf.keras.layers.BatchNormalization(axis=bn_axis, name='top_bn')(x)
     x = tf.keras.layers.Activation(activation, name='top_activation')(x)
 
- 
+
+
+    x = tf.keras.layers.BatchNormalization(axis=3)(x) # 4, 8, 1408
+    x = tf.keras.layers.Conv2D(32, 1, padding='valid')(x)  # (b, 4, 8, 32).
+    x = tf.keras.layers.BatchNormalization(axis=3)(x) # (b, 4, 8, 32).
+    x = tf.keras.layers.Flatten()(x) # (b, 1024).
+    x = tf.keras.layers.ELU()(x)
     '''
-        in shape: (b, 128, 256, 3) .
-        out shape: (b, 4, 8, 1408).
-        ch format: last.
+        in shape: (b, 128, 256, 12) .
+        out shape: (b, 1024). 
     '''
     model = tf.keras.Model(img_input, x, name=model_name)
  
@@ -284,7 +290,7 @@ def EfficientNet(width_coefficient,
 def EfficientNetB2(include_top=True,
                 weights='imagenet',
                 input_tensor=None,
-                input_shape=(12, 128, 256),
+                input_shape=(128, 256, 12).,
                 pooling=None,
                 classes=1000,
                 **kwargs):
