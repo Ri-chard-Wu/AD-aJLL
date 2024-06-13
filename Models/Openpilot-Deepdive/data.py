@@ -278,10 +278,17 @@ class Comma2k19SequenceDataset(PlanningDataset):
 
         cap.release()
 
+        demo_max_len = 801
+        if self.mode == 'demo':
+            imgs = imgs[:demo_max_len]
+            if self.return_origin: origin_imgs = origin_imgs[:demo_max_len]
+
+
+
         seq_length = len(imgs)
         
         # print(f'seq_sample_path: {seq_sample_path}')
-        # print(f'seq_length: {seq_length}')
+        # print(f'>> seq_length: {seq_length}')
 
         if self.mode == 'demo':
             # num_pts: 200.
@@ -306,8 +313,7 @@ class Comma2k19SequenceDataset(PlanningDataset):
 
         # seq_input_img
         imgs = imgs[seq_start_idx-1: seq_end_idx]  # contains one more img
-        imgs = [cv2.warpPerspective(src=img, M=self.warp_matrix, dsize=(512,256),   
-                                         flags=cv2.WARP_INVERSE_MAP) for img in imgs]
+        imgs = [cv2.warpPerspective(src=img, M=self.warp_matrix, dsize=(512,256), flags=cv2.WARP_INVERSE_MAP) for img in imgs]
         
         imgs = [cv2.cvtColor(img, cv2.COLOR_BGR2RGB) for img in imgs]
         imgs = list(Image.fromarray(img) for img in imgs)  # convert to pil for augmentation pipe.

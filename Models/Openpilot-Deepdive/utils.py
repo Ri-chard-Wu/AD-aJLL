@@ -9,6 +9,7 @@ import torch.nn.functional as F
 
 from utils_comma2k19.camera import img_from_device, denormalize, view_frame_from_device_frame
 from cycler import cycler
+import os
 
 matplotlib.rcParams['axes.prop_cycle'] = cycler('color', 
     ['#1f77b4', '#ff7f0e', '#2ca02c', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'])
@@ -205,3 +206,85 @@ def draw_path(device_path, img, width=1, height=1.2, fill_color=(128,0,255), lin
 
         if line_color:
             cv2.polylines(img,[pts],True,line_color)
+
+
+
+
+
+
+
+def visualize(
+         origin_img, # (6, h, w).
+         inputs, # (1, 6, h, w).
+         labels, # (1, num_pts, 3).
+         pred_trajectory, # (M, num_pts, 3).
+         pred_conf, # (M,).,
+         dir_name,
+         file_name
+        ):
+
+    if(not os.path.exists(dir_name)):
+        os.makedirs(dir_name, exist_ok=True)
+    
+    save_path = dir_name + '/' + file_name
+
+    vis_img = (
+            inputs.permute(0, 2, 3, 1)[0] * \
+            torch.tensor((0.2172, 0.2141, 0.2209, 0.2172, 0.2141, 0.2209)) + \
+            torch.tensor((0.3890, 0.3937, 0.3851, 0.3890, 0.3937, 0.3851))
+        )  * 255 # (h, w, 6).
+
+    vis_img = vis_img.clamp(0, 255)
+    
+    img_0 = vis_img[..., :3].numpy().astype(np.uint8) # (h, w, 3).         
+    img_1 = vis_img[..., 3:].numpy().astype(np.uint8) # (h, w, 3).
+
+    fig = plt.figure(figsize=(12, 9))  # W, H
+
+    spec = fig.add_gridspec(3, 3)  # H, W
+
+    ax1 = fig.add_subplot(spec[ 2,  0]) # bottom-left.     # H, W
+    ax2 = fig.add_subplot(spec[ 2,  1]) # bottom-middle.
+    ax3 = fig.add_subplot(spec[ :,  2]) # right most, entire column.
+    ax4 = fig.add_subplot(spec[0:2, 0:2]) # upper-left.
+
+
+    ax1.imshow(img_0)
+    ax1.set_title('network input [previous]')
+    ax1.axis('off')
+
+    ax2.imshow(img_1)
+    ax2.set_title('network input [current]')
+    ax2.axis('off')
+
+    current_metric = (((pred_trajectory[pred_conf.argmax()] - labels.numpy()) ** 2).sum(-1) ** 0.5).mean().item()
+
+    trajectories = list(pred_trajectory) + list(labels) # (M+1, num_pts, 3)
+    confs = list(pred_conf) + [1, ]
+
+    # Direcly plot x & y in trajectories without any projection (e.g. camera intrinsics).
+    ax3 = draw_trajectory_on_ax(ax3, trajectories, confs, ylim=(0, 200))
+
+    ax3.set_title('Mean L2: %.2f' % current_metric)
+    ax3.grid()
+
+
+    overlay = origin_img.copy()
+ 
+    draw_path(pred_trajectory[pred_conf.argmax(), :], overlay, width=1, height=1.2, fill_color=(255,255,255), line_color=(0,255,0))
+
+    origin_img = 0.5 * origin_img + 0.5 * overlay
+
+    draw_path(pred_trajectory[pred_conf.argmax(), :], origin_img, width=1, height=1.2, fill_color=None, line_color=(0,255,0))
+
+    ax4.imshow(origin_img.astype(np.uint8))
+    ax4.set_title('project on current frame')
+    ax4.axis('off')
+
+
+    # ax4.legend()
+    plt.tight_layout()
+    plt.savefig(save_path, pad_inches=0.2, bbox_inches='tight')    
+    plt.close(fig)
+    
+
