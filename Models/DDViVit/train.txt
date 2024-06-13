@@ -898,3 +898,4 @@ epoch0, file 114 / 1552
 [1671] path_loss: 13.179, valid_len_loss: 37.398, std_loss: 5.978, lr: 0.002666137181222439.
 [1679] path_loss: 6.678, valid_len_loss: 36.037, std_loss: 5.588, lr: 0.0026199601124972105.
 epoch0, file 122 / 1552
+epoch0, file 1 / 1552

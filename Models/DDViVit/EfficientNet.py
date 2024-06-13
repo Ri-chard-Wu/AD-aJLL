@@ -290,7 +290,7 @@ def EfficientNet(width_coefficient,
 def EfficientNetB2(include_top=True,
                 weights='imagenet',
                 input_tensor=None,
-                input_shape=(128, 256, 12).,
+                input_shape=(128, 256, 12),
                 pooling=None,
                 classes=1000,
                 **kwargs):

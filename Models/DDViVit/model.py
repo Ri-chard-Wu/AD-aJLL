@@ -26,19 +26,19 @@ class SequencePlanningNetwork(tf.keras.Model):
             in shape: (b, 128, 256, 12) .
             out shape: (b, 1024). 
         '''        
-        # self.backbone = EfficientNetB2()
+        self.backbone = EfficientNetB2()
  
-        self.backbone = FastViT(
-                AttrDict({
-                    'layers': [2, 2, 6, 2],
-                    'embed_dims': [64, 128, 256, 512],
-                    'token_mixers': ("repmixer", "repmixer", "repmixer", "repmixer"),
-                    'pos_embs': [None, None, None, None],
-                    'mlp_ratios': [3, 3, 3, 3],
-                    'downsamples': [True, True, True, True]
-                })
-            )
-        self.backbone.load_ckpt('ckpt', 'fastvit-acc0p96.pkl')  
+        # self.backbone = FastViT(
+        #         AttrDict({
+        #             'layers': [2, 2, 6, 2],
+        #             'embed_dims': [64, 128, 256, 512],
+        #             'token_mixers': ("repmixer", "repmixer", "repmixer", "repmixer"),
+        #             'pos_embs': [None, None, None, None],
+        #             'mlp_ratios': [3, 3, 3, 3],
+        #             'downsamples': [True, True, True, True]
+        #         })
+        #     )
+        # self.backbone.load_ckpt('ckpt', 'fastvit-acc0p96.pkl')  
   
         # # for i, layer in enumerate(self.backbone.layers):
         # #     if layer.name == 'yuv2rgb': continue
