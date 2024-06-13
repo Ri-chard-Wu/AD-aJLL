@@ -135,7 +135,8 @@ def get_train_dataloader(pkl_files):
         X3 = np.zeros((B, H, 512), dtype=np.float32)    
         Y = [np.zeros((B, H, s)) for s in Y_shape]
 
-        print(f'epoch{epoch}, file {fidx+1} / {len(pkl_files)}')
+        # print(f'epoch{epoch}, file {fidx+1} / {len(pkl_files)}')
+        with open("train.txt", "a") as f: f.write(f'epoch{epoch}, file {fidx+1} / {len(pkl_files)}' + '\n')
 
         for bidx in range(B):
             
@@ -442,9 +443,13 @@ if args.ckpt:
 # exit()
 # optimizer, lr_scheduler = model.configure_optimizers(args, model)
 
-optimizer = tf.keras.optimizers.SGD(learning_rate=args.lr_min,
+# optimizer = tf.keras.optimizers.SGD(learning_rate=args.lr_min,
+#                 weight_decay=0.01, ema_momentum=0.9, clipvalue=1.0)        
+
+optimizer = tf.keras.optimizers.AdamW(learning_rate=args.lr_min,
                 weight_decay=0.01, ema_momentum=0.9, clipvalue=1.0)        
 
+ 
 
 # if args.resume and rank == 0:
 #     print('Loading weights from', args.resume)
@@ -503,8 +508,10 @@ for epid, data in enumerate(train_dataloader):
             accum_gradients[i] += grad[i] 
 
     
-    for i in range(labels_mb.shape[0]):
-        plot_bsv(labels_mb[i], traj_pred[i], dir_name=f'output/train', file_name=f'tr-{i}.png')
+    
+    if (epid+1) % args.plot_bsv_interval == 0:
+        for i in range(labels_mb.shape[0]):
+            plot_bsv(labels_mb[i], traj_pred[i], dir_name=f'output/train', file_name=f'tr-{i}.png')
 
 
     averaged_gradients = [accum_grad / tf.cast(args.accum_steps, tf.float32) for accum_grad in accum_gradients]
@@ -523,11 +530,15 @@ for epid, data in enumerate(train_dataloader):
         with open("train.txt", "a") as f: f.write(log + '\n')
         
 
-    if (epid+1) % args.log_wandb_interval == 0:
-        for i in range(len(accum_gradients)): 
-            print(f'[grad-{i}] mean: {tf.math.reduce_mean(tf.math.abs(grad[i]))}, max: {tf.math.reduce_max(tf.math.abs(grad[i]))}, min: {tf.math.reduce_min(tf.math.abs(grad[i]))}')
-    
-    
+    if (epid) % args.log_wandb_interval == 0:
+        
+        with open("wandb.txt", "a") as f: f.write(f'{epid} ################\n')
+
+        for i in range(len(accum_gradients)):  
+            with open("wandb.txt", "a") as f: f.write(f'[grad-{i}] mean: {tf.math.reduce_mean(tf.math.abs(grad[i]))}, max: {tf.math.reduce_max(tf.math.abs(grad[i]))}, min: {tf.math.reduce_min(tf.math.abs(grad[i]))}' + '\n')
+
+            
+
     if (epid+1) % args.val_interval == 0:
         validate()
 

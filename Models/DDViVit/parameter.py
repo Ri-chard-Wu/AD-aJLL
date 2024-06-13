@@ -49,9 +49,10 @@ train_args = AttrDict({
         'ckpt': [None, f'ckpt/DDViVit-5499.h5'][0],
         
         'save_interval': 500,
+        'plot_bsv_interval': 8,
         'log_interval': 8,
         'val_interval': 500,
-        'log_wandb_interval': 250
+        'log_wandb_interval': 10
 
     }) 
  

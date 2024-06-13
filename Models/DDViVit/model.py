@@ -146,18 +146,18 @@ class SequencePlanningNetwork(tf.keras.Model):
 
         x = self.plan_head_tip(feature_cur, training=training) # (b, 2*num_pts+1).
 
-        x = tf.math.tanh(x) 
+        # x = tf.math.tanh(x) 
 
-        # path = tf.math.sinh(x[:, :self.num_pts]) # (b, num_pts).
+        # # path = tf.math.sinh(x[:, :self.num_pts]) # (b, num_pts).
 
-        path = x[:, :self.num_pts] # (b, num_pts).
-        std = x[:, self.num_pts:2*self.num_pts] # (b, num_pts).
-        valid_len = x[:, 2*self.num_pts:] # (b, 1). 
+        # path = x[:, :self.num_pts] # (b, num_pts).
+        # std = x[:, self.num_pts:2*self.num_pts] # (b, num_pts).
+        # valid_len = x[:, 2*self.num_pts:] # (b, 1). 
  
-        path = tanh_rescale(path, -50.0, 50.0) # (b, num_pts).
-        valid_len = tanh_rescale(valid_len, 0.0, 192.0) # (b, 1). 
+        # path = tanh_rescale(path, -50.0, 50.0) # (b, num_pts).
+        # valid_len = tanh_rescale(valid_len, 0.0, 192.0) # (b, 1). 
 
-        x = tf.concat([path, std, valid_len], axis=1) # (b, 2*num_pts+1).
+        # x = tf.concat([path, std, valid_len], axis=1) # (b, 2*num_pts+1).
 
         return x # (b, 2*num_pts+1).
 
