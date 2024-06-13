@@ -449,3 +449,5 @@ epoch0, file 467 / 1552
 [3351] path_loss: 0.233, valid_len_loss: 60.746, std_loss: 0.14, lr: 9.999999747378752e-05.
 [3359] path_loss: 0.366, valid_len_loss: 63.827, std_loss: 0.118, lr: 9.999999747378752e-05.
 epoch0, file 483 / 1552
+[3367] path_loss: 0.599, valid_len_loss: 59.56, std_loss: 0.078, lr: 9.999999747378752e-05.
+[3375] path_loss: 0.357, valid_len_loss: 64.007, std_loss: 0.146, lr: 9.999999747378752e-05.

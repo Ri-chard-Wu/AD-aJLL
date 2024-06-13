@@ -2,7 +2,7 @@
 *.h5
 modelB6*.h5
 # *.pkl
-*.png
+# *.png
 *.jpeg
 tinygrad/
 Model-v1/
