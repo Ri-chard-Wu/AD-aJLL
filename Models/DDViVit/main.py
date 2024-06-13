@@ -499,7 +499,7 @@ for epid, data in enumerate(train_dataloader):
         with tf.GradientTape() as tape:  
             traj_pred = model(input_cur_mb, feature_past) # (b, 2*num_pts+1).  
             path_loss, valid_len_loss, std_loss = loss_fn(traj_pred, labels_mb) # (,), (,).
-            loss = path_loss + 0.001*valid_len_loss + 0.1*std_loss
+            loss = path_loss + 0.0002*valid_len_loss + 0.1*std_loss
         
         grad = tape.gradient(loss, model.trainable_variables)
 

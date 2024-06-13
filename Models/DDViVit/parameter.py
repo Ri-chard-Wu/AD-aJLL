@@ -31,8 +31,8 @@ class AttrDict(dict):
 
 train_args = AttrDict({
        
-        'batch_size': 16, 
-        'accum_steps': 2,        
+        'batch_size': 8, 
+        'accum_steps': 1,        
         'epochs': 100000,  
          
         'total_steps': 2500,

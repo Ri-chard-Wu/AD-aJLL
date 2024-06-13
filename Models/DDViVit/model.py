@@ -82,6 +82,7 @@ class SequencePlanningNetwork(tf.keras.Model):
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(256, activation='relu'),
             tf.keras.layers.Dense(128, activation='relu'), 
+            tf.keras.layers.Dropout(0.3),
             tf.keras.layers.Dense(2*num_pts+1),
         ]) 
  
@@ -138,8 +139,10 @@ class SequencePlanningNetwork(tf.keras.Model):
             features_past: (b, seq_len-1, 768).
         '''
 
-        feature_cur = self.extract_feature(x)[:, None, :] # (b, 1, 768).
- 
+        feature_cur = self.extract_feature(x)[:, None, :] # (b, 1, hid_sz).
+        
+        # print(f'feature_cur.shape: {feature_cur.shape}, flatten: {tf.keras.layers.Flatten()(feature_cur).shape}')
+
         # x = tf.concat([feature_cur, features_past], axis=1) # (b, seq_len, 768).
 
         # x = self.temporal_attention(x, training=training) # (b, 768).
@@ -197,13 +200,16 @@ class MultipleTrajectoryPredictionLoss(tf.keras.Model):
         std_pred = traj_pred[:, self.num_pts:2*self.num_pts] # (b, num_pts).
         valid_len_pred = traj_pred[:, 2*self.num_pts] # (b,).
         
-        valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
         # valid_len_loss = self.reg_loss(valid_len_true, valid_len_pred) # (,).
+        valid_len_loss = tf.math.reduce_mean((valid_len_true - valid_len_pred)**2) # (,).
         
-        path_loss = self.reg_loss(path_true*mask, path_pred*mask) # (b,). 
+        
+        # path_loss = self.reg_loss(path_true*mask, path_pred*mask) # (b,). 
+        path_loss = tf.math.reduce_mean(((path_true-path_pred)*mask)**2, axis=1) # (b,). 
         path_loss = tf.math.reduce_mean(path_loss, axis=0) # (,).
 
-        std_loss = self.reg_loss(std_true*mask, std_pred*mask) # (b,). 
+        # std_loss = self.reg_loss(std_true*mask, std_pred*mask) # (b,). 
+        std_loss = tf.math.reduce_mean(((std_true-std_pred)*mask)**2, axis=1) # (b,). 
         std_loss = tf.math.reduce_mean(std_loss, axis=0) # (,).
  
         return path_loss, valid_len_loss, std_loss # (,).
