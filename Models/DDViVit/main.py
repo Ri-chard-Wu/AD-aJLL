@@ -233,7 +233,7 @@ def get_val_dataloader(pkl_files):
             
         for t in range(H):   
 
-            RGBs[0, t] = cv2.cvtColor(frames[t], cv2.COLOR_BGR2RGB)
+            RGBs[0, t] = cv2.cvtColor(frames[t+1], cv2.COLOR_BGR2RGB)
             X0[0, t] = np.vstack((RGB_to_YUV(frames[t]), RGB_to_YUV(frames[t+1])))
 
             for j in range(12):
@@ -486,6 +486,7 @@ for epid, data in enumerate(train_dataloader):
 
     accum_gradients = [tf.zeros_like(var) for var in model.trainable_variables]
 
+    # print(f'[{epid}] tf.math.reduce_mean(input_cur): {tf.math.reduce_mean(input_cur)}')
 
     for aidx in range(args.accum_steps):
         

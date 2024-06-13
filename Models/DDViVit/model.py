@@ -26,7 +26,7 @@ class SequencePlanningNetwork(tf.keras.Model):
             in shape: (b, 128, 256, 12) .
             out shape: (b, 1024). 
         '''        
-        self.backbone = EfficientNetB2()
+        # self.backbone = EfficientNetB2()
  
         # self.backbone = FastViT(
         #         AttrDict({
@@ -48,21 +48,21 @@ class SequencePlanningNetwork(tf.keras.Model):
 
 
 
-        # self.backbone = tf.keras.Sequential([ 
-        #             tf.keras.layers.Conv2D(filters=64, kernel_size=8, strides=5),
-        #             tf.keras.layers.ReLU(),
-        #             tf.keras.layers.Conv2D(filters=128, kernel_size=5, strides=3),
-        #             tf.keras.layers.ReLU(), 
-        #             tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1),
-        #             tf.keras.layers.ReLU(),
-        #             tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1),
-        #             tf.keras.layers.ReLU(),
-        #             tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1),
-        #             tf.keras.layers.ReLU(),
-        #             tf.keras.layers.Flatten(),
-        #             tf.keras.layers.Dense(1024),
-        #             tf.keras.layers.ReLU()
-        #         ])
+        self.backbone = tf.keras.Sequential([ 
+                    tf.keras.layers.Conv2D(filters=64, kernel_size=8, strides=5),
+                    tf.keras.layers.ReLU(),
+                    tf.keras.layers.Conv2D(filters=128, kernel_size=5, strides=3),
+                    tf.keras.layers.ReLU(), 
+                    tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1),
+                    tf.keras.layers.ReLU(),
+                    tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1),
+                    tf.keras.layers.ReLU(),
+                    tf.keras.layers.Conv2D(filters=128, kernel_size=3, strides=1),
+                    tf.keras.layers.ReLU(),
+                    tf.keras.layers.Flatten(),
+                    tf.keras.layers.Dense(1024),
+                    tf.keras.layers.ReLU()
+                ])
 
 
   

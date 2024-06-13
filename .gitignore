@@ -10,5 +10,9 @@ Control/
 cerealJLL/
 Coding/
 UI/
-
+*.ckpt
+Models/Openpilot-Deepdive/runs/
+__pycache__
+Models/Openpilot-Deepdive/data/
+*.hevc
 
